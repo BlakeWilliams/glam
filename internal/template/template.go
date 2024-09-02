@@ -13,7 +13,7 @@ type TemplateParser struct {
 type template struct {
 	Name    string
 	pos     int
-	content []rune
+	content string
 }
 
 func (p *TemplateParser) ParseTemplate(name, templateValue string) error {
@@ -109,8 +109,9 @@ func (t *template) Parse(text string, components map[string]bool) {
 
 	for _, n := range nodes {
 		fmt.Println(n)
-
 	}
+
+	t.content = compile(nodes)
 }
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary
@@ -251,19 +252,21 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 			t.pos++
 		}
 
-		value := runes[nameStart:t.pos]
+		name := runes[nameStart:t.pos]
 
-		// Skip any whitespace
-		t.skipWhitespace(runes)
+		fmt.Println("name", string(name))
 
 		switch runes[t.pos] {
 		// If we have a > we can return the attributes as-is
 		case '>':
-			attributes[string(value)] = "true"
+			attributes[string(name)] = "true"
 			return attributes, nil
 		// If we have a ' ' we can set the boolean attribute and move on
 		case ' ':
-			attributes[string(value)] = "true"
+			// TODO check if there's an equal sign after this space
+			t.skipWhitespace(runes)
+
+			attributes[string(name)] = "true"
 			continue
 		// If we have an = we need to find the end of the attribute value
 		case '=':
@@ -275,7 +278,7 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 				return nil, fmt.Errorf("error parsing quoted attribute: %w", err)
 			}
 
-			attributes[string(value)] = string(value)
+			attributes[string(name)] = string(value)
 		}
 
 		// Skip any whitespace

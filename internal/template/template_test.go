@@ -1,8 +1,11 @@
 package template
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
+
+	htmltemplate "html/template"
 
 	"github.com/stretchr/testify/require"
 )
@@ -63,11 +66,11 @@ func TestTemplateParse_Attributes(t *testing.T) {
 }
 
 func TestTemplateParse_Nested(t *testing.T) {
-	template := &template{Name: "test"}
-	template.Parse(`
+	tmpl := &template{Name: "test"}
+	tmpl.Parse(`
 		<b>
 			Hello
-			<WrapperComponent rad name="Fox Mulder">
+			<WrapperComponent rad name="Fox Mulder" age="{{.Age}}">
 				<NestedComponent>
 				Foo
 				</NestedComponent>
@@ -77,7 +80,30 @@ func TestTemplateParse_Nested(t *testing.T) {
 		"NestedComponent":  true,
 	})
 
-	fmt.Println(template.String())
+	fmt.Println(tmpl.String())
+
+	var parsed *htmltemplate.Template
+	parsed, err := htmltemplate.New("test").Funcs(htmltemplate.FuncMap{
+		"__goatRenderComponent": func(name string, identifier string, attributes string) string {
+			var b bytes.Buffer
+			err := parsed.ExecuteTemplate(&b, identifier, nil)
+			if err != nil {
+				panic(fmt.Errorf("error rendering component %s: %w", name, err))
+			}
+
+			return b.String()
+		},
+		"__goatDict": func(...any) string {
+			return "wow"
+		},
+	}).Parse(tmpl.String())
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = parsed.Execute(&b, nil)
+
+	fmt.Println("output!", b.String())
+	require.NoError(t, err)
 
 	require.Fail(t, "omg")
 }
@@ -89,7 +115,7 @@ func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
 	})
 	// require.NoError(t, err)
 
-	fmt.Println(template.String())
+	fmt.Println(template.content)
 
 	require.Fail(t, "omg")
 }
