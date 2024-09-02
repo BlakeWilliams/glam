@@ -3,117 +3,114 @@ package template
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"reflect"
 	"testing"
-
-	htmltemplate "html/template"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestTemplateParse(t *testing.T) {
-	parser := &TemplateParser{
-		components: map[string]bool{
-			"Greeter": true,
-		},
-	}
-
-	// err := parser.ParseTemplate(strings.NewReader(`<b>Hello <Yell name="{.Name}"></Yell></b>`))
-	err := parser.ParseTemplate("main", `
-	{{ range $index, $element := .Value }}
-	 	<b>Hi {{.Foo}}</b>
-	{{ end }}
-	`)
-	require.NoError(t, err)
-
-	require.Fail(t, "omg")
+type WrapperComponent struct {
+	Name     string
+	Age      int
+	Children string
 }
 
-func TestTemplateParse_WithContent(t *testing.T) {
-	parser := &TemplateParser{
-		components: map[string]bool{
-			"wrapper": true,
-		},
-	}
-
-	err := parser.ParseTemplate("main", `<b>Hello <WrapperComponent>Foo</WrapperComponent></b>`)
-	require.NoError(t, err)
-
-	require.Fail(t, "omg")
+func (wc *WrapperComponent) Render(w io.Writer) {
+	w.Write([]byte(fmt.Sprintf("<div>Name:%s\nAge: %d\n%s</div>", wc.Name, wc.Age, wc.Children)))
 }
 
-func TestTemplateParse_omg(t *testing.T) {
-	template := &template{Name: "test"}
-	template.Parse(`<b>Hello <WrapperComponent>Foo</WrapperComponent></b>`, map[string]bool{
-		"WrapperComponent": true,
-	})
-	// require.NoError(t, err)
-
-	fmt.Println(template.String())
-
-	require.Fail(t, "omg")
+type NestedComponent struct {
+	Children string
 }
 
-func TestTemplateParse_Attributes(t *testing.T) {
-	template := &template{Name: "test"}
-	template.Parse(`<b>Hello <WrapperComponent rad name="Fox Mulder">Foo</WrapperComponent></b>`, map[string]bool{
-		"WrapperComponent": true,
-	})
-	// require.NoError(t, err)
-
-	fmt.Println(template.String())
-
-	require.Fail(t, "omg")
+func (nc *NestedComponent) Render(w io.Writer) {
+	w.Write([]byte(fmt.Sprintf("<article>%s</article>", nc.Children)))
 }
+
+// func TestTemplateParse(t *testing.T) {
+// 	parser := &TemplateParser{
+// 		components: map[string]bool{
+// 			"Greeter": true,
+// 		},
+// 	}
+
+// 	// err := parser.ParseTemplate(strings.NewReader(`<b>Hello <Yell name="{.Name}"></Yell></b>`))
+// 	err := parser.ParseTemplate("main", `
+// 	{{ range $index, $element := .Value }}
+// 	 	<b>Hi {{.Foo}}</b>
+// 	{{ end }}
+// 	`)
+// 	require.NoError(t, err)
+
+// 	require.Fail(t, "omg")
+// }
+
+// func TestTemplateParse_WithContent(t *testing.T) {
+// 	parser := &Engine{
+// 		components: map[string]reflect.Value{
+// 			"WrapperComponent": reflect.ValueOf(WrapperComponent{}),
+// 		},
+// 	}
+
+// 	_, err := parser.ParseTemplate("main.go", `<b>Hello <WrapperComponent>Foo</WrapperComponent></b>`)
+// 	require.NoError(t, err)
+
+// 	require.Fail(t, "omg")
+// }
+
+// func TestTemplateParse_omg(t *testing.T) {
+// 	template := &Template{Name: "test"}
+// 	template.Parse(`<b>Hello <WrapperComponent>Foo</WrapperComponent></b>`, map[string]reflect.Value{
+// 		"WrapperComponent": reflect.ValueOf(WrapperComponent{}),
+// 	})
+// 	// require.NoError(t, err)
+
+// 	fmt.Println(template.String())
+
+// 	require.Fail(t, "omg")
+// }
+
+// func TestTemplateParse_Attributes(t *testing.T) {
+// 	template := &Template{Name: "test"}
+// 	template.Parse(`<b>Hello <WrapperComponent rad name="Fox Mulder">Foo</WrapperComponent></b>`, map[string]reflect.Value{
+// 		"WrapperComponent": reflect.ValueOf(WrapperComponent{}),
+// 	})
+// 	// require.NoError(t, err)
+
+// 	fmt.Println(template.String())
+
+// 	require.Fail(t, "omg")
+// }
 
 func TestTemplateParse_Nested(t *testing.T) {
-	tmpl := &template{Name: "test"}
-	tmpl.Parse(`
+	engine := NewEngine()
+	err := engine.RegisterComponent("WrapperComponent", &WrapperComponent{})
+	require.NoError(t, err)
+	err = engine.RegisterComponent("NestedComponent", &NestedComponent{})
+	require.NoError(t, err)
+
+	tmpl, err := engine.ParseTemplate("main.goat.html", `
 		<b>
 			Hello
-			<WrapperComponent rad name="Fox Mulder" age="{{.Age}}">
+			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
 				<NestedComponent>
 				Foo
 				</NestedComponent>
 			</WrapperComponent></b>
-	`, map[string]bool{
-		"WrapperComponent": true,
-		"NestedComponent":  true,
-	})
-
-	fmt.Println(tmpl.String())
-
-	var parsed *htmltemplate.Template
-	parsed, err := htmltemplate.New("test").Funcs(htmltemplate.FuncMap{
-		"__goatRenderComponent": func(name string, identifier string, attributes string) string {
-			var b bytes.Buffer
-			err := parsed.ExecuteTemplate(&b, identifier, nil)
-			if err != nil {
-				panic(fmt.Errorf("error rendering component %s: %w", name, err))
-			}
-
-			return b.String()
-		},
-		"__goatDict": func(...any) string {
-			return "wow"
-		},
-	}).Parse(tmpl.String())
+	`)
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = parsed.Execute(&b, nil)
-
-	fmt.Println("output!", b.String())
+	err = tmpl.htmltemplate.Execute(&b, map[string]any{"Age": 32})
 	require.NoError(t, err)
-
+	fmt.Println("output!", b.String())
 	require.Fail(t, "omg")
 }
 
 func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
-	template := &template{Name: "test"}
-	template.Parse(`<a href="{{ GenerateURL "sign up" }}">Sign up</a>`, map[string]bool{
-		"WrapperComponent": true,
-	})
-	// require.NoError(t, err)
+	template := &Template{Name: "test"}
+	template.Parse(`<a href="{{ GenerateURL "sign up" }}">Sign up</a>`, map[string]reflect.Type{})
 
 	fmt.Println(template.content)
 

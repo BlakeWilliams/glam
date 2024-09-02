@@ -1,32 +1,138 @@
 package template
 
 import (
+	"bytes"
 	"fmt"
+	htmltemplate "html/template"
+	"io"
+	"reflect"
 	"strings"
 	"unicode"
 )
 
-type TemplateParser struct {
-	components map[string]bool
+type Engine struct {
+	// components is a map of component names that are available in the template
+	// it's used to determine if a tag is a component and should be rendered as such _and_
+	// to instantiate the component in the generated code
+	components map[string]reflect.Type
+	funcs      htmltemplate.FuncMap
 }
 
-type template struct {
-	Name    string
-	pos     int
-	content string
-}
-
-func (p *TemplateParser) ParseTemplate(name, templateValue string) error {
-	t := &template{
-		Name: name,
+func NewEngine() *Engine {
+	e := &Engine{
+		components: make(map[string]reflect.Type),
 	}
 
-	t.Parse(templateValue, p.components)
+	e.funcs = htmltemplate.FuncMap{
+		"__goatRenderComponent": func(name string, identifier string, attributes map[string]any) htmltemplate.HTML {
+			if _, ok := e.components[name]; !ok {
+				panic(fmt.Errorf("component %s not found", name))
+			}
+
+			// Get the type of the component, and if it's a pointer, get the underlying type
+			// so we can create a new instance of it
+			componentType := e.components[name]
+			isPointer := componentType.Kind() == reflect.Ptr
+			if isPointer {
+				componentType = componentType.Elem()
+			}
+
+			// Create a new instance of the component
+			toRender := reflect.New(componentType)
+			toCallRenderOn := toRender
+			if isPointer {
+				toRender = toRender.Elem()
+			}
+
+			// Loop through the attributes and set them on the component
+			for i := 0; i < componentType.NumField(); i++ {
+				fieldType := componentType.Field(i)
+				field := toRender.Field(i)
+				if !field.CanSet() {
+					continue
+				}
+
+				if value, ok := attributes[fieldType.Name]; ok {
+					field.Set(reflect.ValueOf(value))
+					continue
+				}
+			}
+
+			var b bytes.Buffer
+			fmt.Println("rendering", toRender.Kind())
+			fmt.Println("rendering", toRender.Type())
+			toCallRenderOn.Interface().(Renderable).Render(&b)
+			return htmltemplate.HTML(b.String())
+		},
+		"__goatDict": func(args ...any) map[string]any {
+			if len(args)%2 != 0 {
+				panic("invalid number of arguments to __goatDict")
+			}
+
+			dict := make(map[string]any, len(args)/2)
+
+			for i := 0; i < len(args); i += 2 {
+				dict[args[i].(string)] = args[i+1]
+			}
+
+			return dict
+		},
+	}
+
+	return e
+}
+
+func Render(w io.Writer, r Renderable) error {
+	// TODO: return an error
+	r.Render(w)
 
 	return nil
 }
 
-func (t *template) String() string {
+type Renderable interface {
+	// Render renders a struct into the provided io.Writer
+	Render(w io.Writer) // TODO: return an error
+}
+
+type Template struct {
+	Name         string
+	pos          int
+	content      string
+	htmltemplate *htmltemplate.Template
+}
+
+func (p *Engine) RegisterComponent(name string, value Renderable) error {
+	r := reflect.TypeOf(value)
+	if r.Kind() != reflect.Struct && (r.Kind() != reflect.Ptr && r.Elem().Kind() != reflect.Struct) {
+		return fmt.Errorf("provided value must be a struct or a pointer to a struct")
+	}
+
+	p.components[name] = reflect.TypeOf(value)
+
+	return nil
+}
+
+func (p *Engine) ParseTemplate(name, templateValue string) (*Template, error) {
+	t := &Template{
+		Name: name,
+	}
+
+	t.Parse(templateValue, p.components)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error parsing template: %w", err)
+	// }
+
+	var err error
+	// temporary until we have a compile step
+	t.htmltemplate, err = htmltemplate.New(name).Funcs(p.funcs).Parse(t.String())
+	if err != nil {
+		return nil, fmt.Errorf("error parsing template: %w", err)
+	}
+
+	return t, nil
+}
+
+func (t *Template) String() string {
 	return string(t.content)
 
 }
@@ -81,7 +187,7 @@ func (n *Node) String() string {
 	return b.String()
 }
 
-func (t *template) Parse(text string, components map[string]bool) {
+func (t *Template) Parse(text string, components map[string]reflect.Type) {
 	runes := []rune(text)
 	nodes := make([]*Node, 0)
 
@@ -107,16 +213,17 @@ func (t *template) Parse(text string, components map[string]bool) {
 		}
 	}
 
-	for _, n := range nodes {
-		fmt.Println(n)
-	}
+	// for _, n := range nodes {
+	// 	fmt.Println(n)
+	// }
 
 	t.content = compile(nodes)
+	// fmt.Println(t.content)
 }
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary
 // code to render a component
-func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, error) {
+func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*Node, error) {
 	start := t.pos
 
 	// We somehow got here without a <, this is a bug
@@ -175,7 +282,7 @@ func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, er
 			// If we have a matching component, we need to return a component node instead
 			// of a raw node, which includes parsing content until we find the
 			// relevant end tag so it can be lifted into a `define` block later.
-			if components[string(tagName)] {
+			if _, ok := components[string(tagName)]; ok {
 				children, err := t.parseUntilCloseTag(runes, tagName, components)
 				if err != nil {
 					return nil, fmt.Errorf("error parsing children: %w", err)
@@ -232,7 +339,7 @@ func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, er
 	}, nil
 }
 
-func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
+func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 	attributes := make(map[string]string)
 
 	// If we have a > we can return the attributes as-is
@@ -253,8 +360,6 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 		}
 
 		name := runes[nameStart:t.pos]
-
-		fmt.Println("name", string(name))
 
 		switch runes[t.pos] {
 		// If we have a > we can return the attributes as-is
@@ -288,7 +393,7 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 	return attributes, nil
 }
 
-func (t *template) parseQuotedAttribute(runes []rune) ([]rune, error) {
+func (t *Template) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	// Get the quote character and skip it
 	// TODO: this could be a "quoteless" attribute, so we need to handle that at
 	// some point
@@ -319,7 +424,7 @@ func (t *template) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	}
 }
 
-func (t *template) skipGoTemplate(runes []rune) {
+func (t *Template) skipGoTemplate(runes []rune) {
 	// skip the {{
 	t.pos += 2
 
@@ -334,7 +439,7 @@ func (t *template) skipGoTemplate(runes []rune) {
 	t.pos += 2
 }
 
-func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
+func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]reflect.Type) ([]*Node, error) {
 	nodes := make([]*Node, 0)
 
 	start := t.pos
@@ -404,7 +509,7 @@ func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 	}
 }
 
-func (t *template) skipWhitespace(runes []rune) {
+func (t *Template) skipWhitespace(runes []rune) {
 	for unicode.IsSpace(runes[t.pos]) {
 		t.pos++
 	}

@@ -48,7 +48,6 @@ func rawCompile(nodes []*Node) (primaryContent string, defineContent []string) {
 			attributes.WriteString(`(__goatDict`)
 
 			for k, v := range node.Attributes {
-				fmt.Println(k, v)
 				if strings.HasPrefix(v, "{{") {
 					v = strings.Trim(v, "{} ")
 					attributes.WriteString(fmt.Sprintf(` "%s" %s`, k, v))
