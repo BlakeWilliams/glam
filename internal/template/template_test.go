@@ -81,3 +81,15 @@ func TestTemplateParse_Nested(t *testing.T) {
 
 	require.Fail(t, "omg")
 }
+
+func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
+	template := &template{Name: "test"}
+	template.Parse(`<a href="{{ GenerateURL "sign up" }}">Sign up</a>`, map[string]bool{
+		"WrapperComponent": true,
+	})
+	// require.NoError(t, err)
+
+	fmt.Println(template.String())
+
+	require.Fail(t, "omg")
+}

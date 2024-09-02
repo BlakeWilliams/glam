@@ -171,6 +171,9 @@ func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, er
 			// skip the >
 			t.pos++
 
+			// If we have a matching component, we need to return a component node instead
+			// of a raw node, which includes parsing content until we find the
+			// relevant end tag so it can be lifted into a `define` block later.
 			if components[string(tagName)] {
 				children, err := t.parseUntilCloseTag(runes, tagName, components)
 				if err != nil {
@@ -184,15 +187,15 @@ func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, er
 					Children:   children,
 				}, nil
 
-			} else {
-				// skip the >
-				t.pos++
-
-				return &Node{
-					Type: NodeTypeRaw,
-					Raw:  string(runes[start:t.pos]),
-				}, nil
 			}
+
+			// skip the >
+			t.pos++
+
+			return &Node{
+				Type: NodeTypeRaw,
+				Raw:  string(runes[start:t.pos]),
+			}, nil
 		}
 	}
 
@@ -267,21 +270,12 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 			// Skip the =
 			t.pos++
 
-			// Get the quote character and skip it
-			quote := runes[t.pos]
-			t.pos++
-
-			valueStart := t.pos
-
-			// TODO: This needs to account for {{ }} and ignore quotes inside of it
-			for runes[t.pos] != quote {
-				t.pos++
+			value, err := t.parseQuotedAttribute(runes)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing quoted attribute: %w", err)
 			}
 
-			attributes[string(value)] = string(runes[valueStart:t.pos])
-
-			// Skip the end quote
-			t.pos++
+			attributes[string(value)] = string(value)
 		}
 
 		// Skip any whitespace
@@ -289,6 +283,52 @@ func (t *template) parseAttributes(runes []rune) (map[string]string, error) {
 	}
 
 	return attributes, nil
+}
+
+func (t *template) parseQuotedAttribute(runes []rune) ([]rune, error) {
+	// Get the quote character and skip it
+	// TODO: this could be a "quoteless" attribute, so we need to handle that at
+	// some point
+	quote := runes[t.pos]
+	t.pos++
+
+	valueStart := t.pos
+
+	for {
+		switch runes[t.pos] {
+		// We're at the end of the tag, so we can just return
+		case quote:
+			value := runes[valueStart:t.pos]
+
+			// skip the close quote
+			t.pos++
+
+			return value, nil
+		// We might have a go template tag which means we need to handle quotes
+		// inside of it
+		case '{':
+			if runes[t.pos+1] == '{' {
+				t.skipGoTemplate(runes)
+			}
+		default:
+			t.pos++
+		}
+	}
+}
+
+func (t *template) skipGoTemplate(runes []rune) {
+	// skip the {{
+	t.pos += 2
+
+	// This is a bit naive, but we're just going to skip until we find the end
+	// of the tag ignoring any potential }} values inside of it that may be part
+	// of string literals
+	for runes[t.pos] != '}' && runes[t.pos+1] != '}' {
+		t.pos++
+	}
+
+	// skip the }}
+	t.pos += 2
 }
 
 func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
