@@ -3,6 +3,7 @@ package template
 import (
 	"bytes"
 	"fmt"
+	"html/template"
 	"io"
 	"reflect"
 	"testing"
@@ -13,7 +14,7 @@ import (
 type WrapperComponent struct {
 	Name     string
 	Age      int
-	Children string
+	Children template.HTML
 }
 
 func (wc *WrapperComponent) Render(w io.Writer) {
@@ -21,7 +22,7 @@ func (wc *WrapperComponent) Render(w io.Writer) {
 }
 
 type NestedComponent struct {
-	Children string
+	Children template.HTML
 }
 
 func (nc *NestedComponent) Render(w io.Writer) {

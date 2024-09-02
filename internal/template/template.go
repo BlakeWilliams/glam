@@ -24,46 +24,6 @@ func NewEngine() *Engine {
 	}
 
 	e.funcs = htmltemplate.FuncMap{
-		"__goatRenderComponent": func(name string, identifier string, attributes map[string]any) htmltemplate.HTML {
-			if _, ok := e.components[name]; !ok {
-				panic(fmt.Errorf("component %s not found", name))
-			}
-
-			// Get the type of the component, and if it's a pointer, get the underlying type
-			// so we can create a new instance of it
-			componentType := e.components[name]
-			isPointer := componentType.Kind() == reflect.Ptr
-			if isPointer {
-				componentType = componentType.Elem()
-			}
-
-			// Create a new instance of the component
-			toRender := reflect.New(componentType)
-			toCallRenderOn := toRender
-			if isPointer {
-				toRender = toRender.Elem()
-			}
-
-			// Loop through the attributes and set them on the component
-			for i := 0; i < componentType.NumField(); i++ {
-				fieldType := componentType.Field(i)
-				field := toRender.Field(i)
-				if !field.CanSet() {
-					continue
-				}
-
-				if value, ok := attributes[fieldType.Name]; ok {
-					field.Set(reflect.ValueOf(value))
-					continue
-				}
-			}
-
-			var b bytes.Buffer
-			fmt.Println("rendering", toRender.Kind())
-			fmt.Println("rendering", toRender.Type())
-			toCallRenderOn.Interface().(Renderable).Render(&b)
-			return htmltemplate.HTML(b.String())
-		},
 		"__goatDict": func(args ...any) map[string]any {
 			if len(args)%2 != 0 {
 				panic("invalid number of arguments to __goatDict")
@@ -80,6 +40,57 @@ func NewEngine() *Engine {
 	}
 
 	return e
+}
+
+func generateRenderFunc(t htmltemplate.Template, componentMap map[string]reflect.Type) func(string, string, map[string]any, any) htmltemplate.HTML {
+	return func(name string, identifier string, attributes map[string]any, existingData any) htmltemplate.HTML {
+		if _, ok := componentMap[name]; !ok {
+			panic(fmt.Errorf("component %s not found", name))
+		}
+
+		// Get the type of the component, and if it's a pointer, get the underlying type
+		// so we can create a new instance of it
+		componentType := componentMap[name]
+		isPointer := componentType.Kind() == reflect.Ptr
+		if isPointer {
+			componentType = componentType.Elem()
+		}
+
+		// Create a new instance of the component
+		toRender := reflect.New(componentType)
+		toCallRenderOn := toRender
+		if isPointer {
+			toRender = toRender.Elem()
+		}
+
+		// Loop through the attributes and set them on the component
+		for i := 0; i < componentType.NumField(); i++ {
+			fieldType := componentType.Field(i)
+			field := toRender.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+
+			if fieldType.Name == "Children" {
+				var b bytes.Buffer
+				t.ExecuteTemplate(&b, identifier, existingData)
+				field.Set(reflect.ValueOf(htmltemplate.HTML(b.String())))
+				continue
+			}
+
+			if value, ok := attributes[fieldType.Name]; ok {
+				field.Set(reflect.ValueOf(value))
+				continue
+			}
+		}
+
+		var b bytes.Buffer
+		fmt.Println("rendering", toRender.Kind())
+		fmt.Println("rendering", toRender.Type())
+		toCallRenderOn.Interface().(Renderable).Render(&b)
+		return htmltemplate.HTML(b.String())
+	}
+
 }
 
 func Render(w io.Writer, r Renderable) error {
@@ -118,13 +129,15 @@ func (p *Engine) ParseTemplate(name, templateValue string) (*Template, error) {
 	}
 
 	t.Parse(templateValue, p.components)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error parsing template: %w", err)
-	// }
 
 	var err error
 	// temporary until we have a compile step
-	t.htmltemplate, err = htmltemplate.New(name).Funcs(p.funcs).Parse(t.String())
+	t.htmltemplate = htmltemplate.New(name)
+	t.htmltemplate.Funcs(htmltemplate.FuncMap{
+		"__goatRenderComponent": generateRenderFunc(*t.htmltemplate, p.components),
+		"__goatDict":            p.funcs["__goatDict"],
+	})
+	t.htmltemplate, err = t.htmltemplate.Parse(t.String())
 	if err != nil {
 		return nil, fmt.Errorf("error parsing template: %w", err)
 	}
