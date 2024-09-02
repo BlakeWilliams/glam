@@ -59,7 +59,7 @@ func rawCompile(nodes []*Node) (primaryContent string, defineContent []string) {
 			attributes.WriteString(`)`)
 			rawContent.WriteString(fmt.Sprintf(`{{__goatRenderComponent "%s" "%s" %s .}}`, node.TagName, definition.identifier, attributes.String()))
 		case node.Type == NodeTypeComponent && len(node.Children) == 0:
-			rawContent.WriteString(fmt.Sprintf(`{{__goatRenderComponent "%s" nil}}`, node.TagName))
+			rawContent.WriteString(fmt.Sprintf(`{{__goatRenderComponent "%s" "" nil .}}`, node.TagName))
 		}
 	}
 

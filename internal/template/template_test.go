@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
+// WrapperComponent is a test component that renders a div with a name and age
 type WrapperComponent struct {
 	Name     string
 	Age      int
@@ -18,7 +19,7 @@ type WrapperComponent struct {
 }
 
 func (wc *WrapperComponent) Render(w io.Writer) {
-	w.Write([]byte(fmt.Sprintf("<div>Name:%s\nAge: %d\n%s</div>", wc.Name, wc.Age, wc.Children)))
+	w.Write([]byte(fmt.Sprintf("<div>Name: %s\nAge: %d\n%s</div>", wc.Name, wc.Age, wc.Children)))
 }
 
 type NestedComponent struct {
@@ -106,14 +107,25 @@ func TestTemplateParse_Nested(t *testing.T) {
 	err = tmpl.htmltemplate.Execute(&b, map[string]any{"Age": 32})
 	require.NoError(t, err)
 	fmt.Println("output!", b.String())
-	require.Fail(t, "omg")
+	require.Regexp(t, regexp.MustCompile(`<b>\s+Hello`), b.String())
+	require.Contains(t, b.String(), "Name: Fox Mulder")
+	require.Contains(t, b.String(), "Age: 32")
+	require.Regexp(t, regexp.MustCompile(`<article>\s+Foo`), b.String())
+	require.Regexp(t, regexp.MustCompile(`</b>`), b.String())
 }
 
 func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
-	template := &Template{Name: "test"}
-	template.Parse(`<a href="{{ GenerateURL "sign up" }}">Sign up</a>`, map[string]reflect.Type{})
+	engine := NewEngine()
+	engine.funcs["GenerateURL"] = func(name string) string {
+		return "http://localhost:3000/sign-up"
+	}
 
-	fmt.Println(template.content)
+	tmpl, err := engine.ParseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
+	require.NoError(t, err)
 
-	require.Fail(t, "omg")
+	var b bytes.Buffer
+	err = tmpl.htmltemplate.Execute(&b, nil)
+	require.NoError(t, err)
+
+	require.Regexp(t, regexp.MustCompile(`<a href="http://localhost:3000/sign-up">Sign up</a>`), b.String())
 }

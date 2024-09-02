@@ -73,7 +73,10 @@ func generateRenderFunc(t htmltemplate.Template, componentMap map[string]reflect
 
 			if fieldType.Name == "Children" {
 				var b bytes.Buffer
-				t.ExecuteTemplate(&b, identifier, existingData)
+				err := t.ExecuteTemplate(&b, identifier, existingData)
+				if err != nil {
+					panic(err)
+				}
 				field.Set(reflect.ValueOf(htmltemplate.HTML(b.String())))
 				continue
 			}
@@ -129,14 +132,18 @@ func (p *Engine) ParseTemplate(name, templateValue string) (*Template, error) {
 	}
 
 	t.Parse(templateValue, p.components)
-
-	var err error
 	// temporary until we have a compile step
 	t.htmltemplate = htmltemplate.New(name)
-	t.htmltemplate.Funcs(htmltemplate.FuncMap{
+
+	funcs := htmltemplate.FuncMap{
 		"__goatRenderComponent": generateRenderFunc(*t.htmltemplate, p.components),
-		"__goatDict":            p.funcs["__goatDict"],
-	})
+	}
+	for name, fn := range p.funcs {
+		funcs[name] = fn
+	}
+
+	var err error
+	t.htmltemplate.Funcs(funcs)
 	t.htmltemplate, err = t.htmltemplate.Parse(t.String())
 	if err != nil {
 		return nil, fmt.Errorf("error parsing template: %w", err)
