@@ -76,7 +76,6 @@ func TestTemplateParse_Nested(t *testing.T) {
 		"WrapperComponent": true,
 		"NestedComponent":  true,
 	})
-	// require.NoError(t, err)
 
 	fmt.Println(template.String())
 
