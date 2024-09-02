@@ -322,13 +322,11 @@ func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 				// skip the >
 				t.pos++
 
-				fmt.Println("end tag", string(endTagName))
 				// If we have a matching end tag, we can return the nodes
 				if string(endTagName) == string(tagName) {
 					// If start == end we immediately ran into a closing tag, so
 					// we can skip emitting raw content
 					if start != end {
-						fmt.Println("raw", string(runes[start:end]))
 						nodes = append(nodes, &Node{
 							Type: NodeTypeRaw,
 							Raw:  string(runes[start:end]),
@@ -368,121 +366,3 @@ func (t *template) skipWhitespace(runes []rune) {
 		t.pos++
 	}
 }
-
-// func (t *template) parseComponent(runes []rune, components map[string]bool) *Node {
-// 	start := t.pos
-
-// 	// skip the <
-// 	t.pos++
-
-// 	if runes[t.pos] == '/' {
-// 		return &Node{
-// 			Type: NodeTypeRaw,
-// 			Raw:  string(runes[start : t.pos-1]),
-// 		}
-// 	}
-// 	tagName := make([]rune, 0, 6)
-
-// 	for runes[t.pos] != ' ' && runes[t.pos] != '>' {
-// 		tagName = append(tagName, runes[t.pos])
-// 		t.pos++
-
-// 		if t.pos >= len(runes) {
-// 			panic("unexpected end of file parsing component tag")
-// 		}
-// 	}
-
-// 	// This is a raw tag, so we can
-// 	if !unicode.IsUpper(tagName[0]) && !components[string(tagName)] {
-// 		return
-// 	}
-
-// 	attributes := map[string]string{}
-
-// 	for runes[t.pos] != '>' {
-// 		// skip spaces
-// 		for runes[t.pos] == ' ' {
-// 			t.pos++
-// 		}
-
-// 		// If we're at the end of the file, we're missing a closing tag
-// 		if t.pos >= len(runes) {
-// 			panic("unexpected end of file parsing component attributes")
-// 		}
-
-// 		if runes[t.pos] == '>' {
-// 			t.pos++
-// 			break
-// 		}
-
-// 		// We're in an attribute, so we need to parse the key and value
-// 		name := make([]rune, 0, 6)
-// 		for runes[t.pos] != '=' && runes[t.pos] != ' ' && runes[t.pos] != '>' {
-// 			name = append(name, runes[t.pos])
-// 			t.pos++
-// 		}
-
-// 		switch runes[t.pos] {
-// 		case ' ':
-// 			// This is a boolean attribute
-// 			attributes[string(name)] = "true"
-// 		case '=':
-// 			// Skip the equals sign
-// 			t.pos++
-
-// 			for runes[t.pos] == ' ' {
-// 				t.pos++
-// 			}
-
-// 			if t.pos >= len(runes) {
-// 				panic("unexpected end of file parsing component attribute value")
-// 			}
-
-// 			// This is a quoted attribute
-// 			quote := runes[t.pos]
-// 			if quote != '"' && quote != '\'' {
-// 				panic("unexpected character parsing component attribute value, expected quote")
-// 			}
-
-// 			t.pos++
-
-// 			value := make([]rune, 0, 6)
-// 			for runes[t.pos] != quote {
-// 				value = append(value, runes[t.pos])
-// 				t.pos++
-
-// 				if t.pos >= len(runes) {
-// 					panic("unexpected end of file parsing component attribute value")
-// 				}
-// 			}
-
-// 			attributes[string(name)] = string(value)
-
-// 			t.pos++
-
-// 			if t.pos >= len(runes) {
-// 				panic("unexpected end of file parsing component attributes")
-// 			}
-
-// 			for runes[t.pos] == ' ' {
-// 				t.pos++
-// 			}
-// 		}
-
-// 		if runes[t.pos] == '>' {
-// 			t.pos++
-// 			break
-// 		}
-
-// 		// TODO: Actually emit some code!
-// 		fmt.Println("tagname", string(tagName))
-// 		fmt.Println("attrs", attributes)
-// 	}
-
-// 	if runes[t.pos] == '>' {
-// 		t.pos++
-// 	}
-
-// 	// Now we need to parse the content of the component
-// 	//t.parseUntilCloseTag(runes, string(tagName), components)
-// }
