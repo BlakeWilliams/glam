@@ -2,6 +2,7 @@ package template
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 )
 
@@ -50,6 +51,36 @@ type Node struct {
 	Raw string
 }
 
+func (n *Node) String() string {
+	var b strings.Builder
+
+	typeName := "Component"
+	if n.Type == NodeTypeRaw {
+		typeName = "Raw"
+	}
+
+	b.WriteString("Node{\n")
+	switch n.Type {
+	case NodeTypeComponent:
+		b.WriteString(fmt.Sprintf("  TagName: %s\n", n.TagName))
+		b.WriteString(fmt.Sprintf("  Attributes: %s\n", n.Attributes))
+		for _, c := range n.Children {
+			parts := strings.Split(c.String(), "\n")
+			for i, p := range parts {
+				parts[i] = fmt.Sprintf("  %s", p)
+			}
+			b.WriteString(fmt.Sprintf("  Children: %s\n", strings.Join(parts, "\n")))
+		}
+	case NodeTypeRaw:
+		b.WriteString(fmt.Sprintf("  Type: %s\n", typeName))
+		b.WriteString(fmt.Sprintf("  Content: \"%s\"\n", n.Raw))
+	}
+
+	b.WriteString("}")
+
+	return b.String()
+}
+
 func (t *template) Parse(text string, components map[string]bool) {
 	runes := []rune(text)
 	nodes := make([]*Node, 0)
@@ -78,9 +109,6 @@ func (t *template) Parse(text string, components map[string]bool) {
 
 	for _, n := range nodes {
 		fmt.Println(n)
-		for _, c := range n.Children {
-			fmt.Printf("   %v", c)
-		}
 
 	}
 }
@@ -148,7 +176,6 @@ func (t *template) parseTag(runes []rune, components map[string]bool) (*Node, er
 				if err != nil {
 					return nil, fmt.Errorf("error parsing children: %w", err)
 				}
-				fmt.Println("children", children)
 
 				return &Node{
 					Type:       NodeTypeComponent,
@@ -273,7 +300,6 @@ func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 			panic("unclosed component tag")
 		}
 
-		fmt.Println(string(runes[t.pos]))
 		switch runes[t.pos] {
 		// we might be in a tag, which could be closing, could be another component, or could be an unescaped <
 		case '<':
@@ -296,11 +322,13 @@ func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 				// skip the >
 				t.pos++
 
+				fmt.Println("end tag", string(endTagName))
 				// If we have a matching end tag, we can return the nodes
 				if string(endTagName) == string(tagName) {
 					// If start == end we immediately ran into a closing tag, so
 					// we can skip emitting raw content
 					if start != end {
+						fmt.Println("raw", string(runes[start:end]))
 						nodes = append(nodes, &Node{
 							Type: NodeTypeRaw,
 							Raw:  string(runes[start:end]),
@@ -323,6 +351,8 @@ func (t *template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 					return nil, fmt.Errorf("error parsing tag: %w", err)
 				}
 				nodes = append(nodes, n)
+
+				start = t.pos
 			} else {
 				t.pos++
 			}
