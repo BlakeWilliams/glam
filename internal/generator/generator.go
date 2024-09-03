@@ -1,4 +1,4 @@
-package compiler
+package generator
 
 import (
 	"bytes"
@@ -7,10 +7,11 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"path"
 	"strings"
-	"text/template"
+	stdtemplate "text/template"
 )
 
 var errNoComponents = fmt.Errorf("no components found")
@@ -22,6 +23,28 @@ type component struct {
 	StructName       string
 	TemplateFileName string
 	packageName      string
+	path             string
+}
+
+// TemplateContent returns the content of the template file as a string
+// we need to know which components are valid so we can identify components
+// that are valid and can be rendered using the <ComponentName> syntax
+func (c component) TemplateContent(validComponents map[string]bool) string {
+	f, err := os.Open(c.path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	rawContent, err := io.ReadAll(f)
+	if err != nil {
+		panic(err)
+	}
+
+	content := strings.Replace(string(rawContent), `"`, `\"`, -1)
+	content = strings.Replace(content, `\`, `\\`, -1)
+	content = strings.Replace(content, "\n", `\n`, -1)
+	return content
 }
 
 // compile reads the go files in the given directory and generates the relevant
@@ -73,7 +96,7 @@ func Compile(directory string) error {
 		return fmt.Errorf("no components found")
 	}
 
-	f, err := os.OpenFile(path.Join(directory, "generated.go"), os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path.Join(directory, "generated.go"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file for writing: %w", err)
 	}
@@ -148,7 +171,15 @@ func componentsFromFile(file string) ([]component, error) {
 						fmt.Printf("WARNING: goat:component comment found for `%s`, but no template name provided", structName)
 					}
 
-					components = append(components, component{StructName: structName, TemplateFileName: name, packageName: packageName})
+					components = append(
+						components,
+						component{
+							StructName:       structName,
+							TemplateFileName: name,
+							packageName:      packageName,
+							path:             path.Join(path.Dir(file), name),
+						},
+					)
 				}
 			}
 
@@ -185,7 +216,15 @@ func componentsFromFile(file string) ([]component, error) {
 							fmt.Printf("WARNING: goat:component comment found for `%s`, but no template name provided", structName)
 						}
 
-						components = append(components, component{StructName: structName, TemplateFileName: name, packageName: packageName})
+						components = append(
+							components,
+							component{
+								StructName:       structName,
+								TemplateFileName: name,
+								packageName:      packageName,
+								path:             path.Join(path.Dir(file), name),
+							},
+						)
 					}
 				}
 			}
@@ -204,27 +243,45 @@ func componentsFromFile(file string) ([]component, error) {
 }
 
 func generateFile(components []component) string {
-	template := template.Must(template.New("file").Parse(`package {{.PackageName}}
+	tmpl := stdtemplate.Must(stdtemplate.New("file").Parse(`package {{.PackageName}}
 
 	import (
-		"io"
+		"fmt"
+		"github.com/blakewilliams/goat/template"
+		stdtemplate "html/template"
 	)
-	{{ range .Components }}
-	// Render renders the {{.StructName}} component
-	func ({{.StructName}}) Render(w io.Writer) {
-	// TODO
+
+	func NewEngine(funcs stdtemplate.FuncMap) (*template.Engine, error) {
+		e := template.New(funcs)
+		var err error
+		{{ range .Components }}
+			err = e.RegisterComponent(&{{.StructName}}{}, "{{.TemplateContent $.ComponentNames}}")
+			if err != nil {
+				return nil, fmt.Errorf("failed to register component {{.StructName}}: %w", err)
+			}
+		{{ end }}
+
+		return e, nil
 	}
-	{{ end }}
 	`))
 
 	var b bytes.Buffer
 
-	err := template.Execute(&b, struct {
-		PackageName string
-		Components  []component
+	componentNames := make(map[string]bool, len(components))
+	for _, c := range components {
+		componentNames[c.StructName] = true
+	}
+
+	components[0].TemplateContent(componentNames)
+
+	err := tmpl.Execute(&b, struct {
+		PackageName    string
+		Components     []component
+		ComponentNames map[string]bool
 	}{
-		PackageName: components[0].packageName,
-		Components:  components,
+		PackageName:    components[0].packageName,
+		Components:     components,
+		ComponentNames: componentNames,
 	})
 
 	if err != nil {

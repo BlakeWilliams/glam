@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/blakewilliams/goat/internal/compiler"
+	"github.com/blakewilliams/goat/internal/generator"
 	"github.com/urfave/cli"
 )
 
@@ -29,7 +29,7 @@ func main() {
 						return fmt.Errorf("directory is required")
 					}
 
-					if err := compiler.Compile(directory); err != nil {
+					if err := generator.Compile(directory); err != nil {
 						return fmt.Errorf("failed to compile: %w", err)
 					}
 					fmt.Println("OK")

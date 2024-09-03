@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"io"
 	"regexp"
 	"testing"
 
@@ -18,17 +17,29 @@ type WrapperComponent struct {
 	Children template.HTML
 }
 
-func (wc *WrapperComponent) Render(w io.Writer) {
-	w.Write([]byte(fmt.Sprintf("<div>Name: %s\nAge: %d\n%s</div>", wc.Name, wc.Age, wc.Children)))
-}
+var wrapperTemplate = `<div>
+	Name: {{.Name}}
+	Age: {{.Age}}
+	{{.Children}}
+</div>
+`
+
+// func (wc *WrapperComponent) Render(w io.Writer) {
+// 	w.Write([]byte(fmt.Sprintf("<div>Name: %s\nAge: %d\n%s</div>", wc.Name, wc.Age, wc.Children)))
+// }
 
 type NestedComponent struct {
 	Children template.HTML
 }
 
-func (nc *NestedComponent) Render(w io.Writer) {
-	w.Write([]byte(fmt.Sprintf("<article>%s</article>", nc.Children)))
-}
+// func (nc *NestedComponent) Render(w io.Writer) {
+// 	w.Write([]byte(fmt.Sprintf("<article>%s</article>", nc.Children)))
+// }
+
+var nestedTemplate = `<article>
+	{{.Children}}
+</article>
+`
 
 // func TestTemplateParse(t *testing.T) {
 // 	parser := &TemplateParser{
@@ -86,13 +97,20 @@ func (nc *NestedComponent) Render(w io.Writer) {
 // }
 
 func TestTemplateParse_Nested(t *testing.T) {
-	engine := NewEngine()
-	err := engine.RegisterComponent("WrapperComponent", &WrapperComponent{})
+	engine := New(nil)
+	err := engine.RegisterComponent(
+		&WrapperComponent{},
+		wrapperTemplate,
+	)
 	require.NoError(t, err)
-	err = engine.RegisterComponent("NestedComponent", &NestedComponent{})
+	err = engine.RegisterComponent(
+		&NestedComponent{},
+		nestedTemplate,
+	)
 	require.NoError(t, err)
+	fmt.Println(engine)
 
-	tmpl, err := engine.ParseTemplate("main.goat.html", `
+	tmpl, err := engine.parseTemplate("main.goat.html", `
 		<b>
 			Hello
 			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
@@ -115,12 +133,12 @@ func TestTemplateParse_Nested(t *testing.T) {
 }
 
 func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
-	engine := NewEngine()
+	engine := New(nil)
 	engine.funcs["GenerateURL"] = func(name string) string {
 		return "http://localhost:3000/sign-up"
 	}
 
-	tmpl, err := engine.ParseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
+	tmpl, err := engine.parseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
 	require.NoError(t, err)
 
 	var b bytes.Buffer

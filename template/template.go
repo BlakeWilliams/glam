@@ -10,17 +10,20 @@ import (
 	"unicode"
 )
 
+// Engine is a template engine that can be used to render components
 type Engine struct {
 	// components is a map of component names that are available in the template
 	// it's used to determine if a tag is a component and should be rendered as such _and_
 	// to instantiate the component in the generated code
-	components map[string]reflect.Type
-	funcs      htmltemplate.FuncMap
+	components  map[string]reflect.Type
+	templateMap map[string]*htmltemplate.Template
+	funcs       htmltemplate.FuncMap
 }
 
-func NewEngine() *Engine {
+func New(funcs htmltemplate.FuncMap) *Engine {
 	e := &Engine{
-		components: make(map[string]reflect.Type),
+		components:  make(map[string]reflect.Type),
+		templateMap: make(map[string]*htmltemplate.Template),
 	}
 
 	e.funcs = htmltemplate.FuncMap{
@@ -39,10 +42,16 @@ func NewEngine() *Engine {
 		},
 	}
 
+	if funcs != nil {
+		for k, v := range funcs {
+			e.funcs[k] = v
+		}
+	}
+
 	return e
 }
 
-func generateRenderFunc(t htmltemplate.Template, componentMap map[string]reflect.Type) func(string, string, map[string]any, any) htmltemplate.HTML {
+func generateRenderFunc(e *Engine, t htmltemplate.Template, componentMap map[string]reflect.Type) func(string, string, map[string]any, any) htmltemplate.HTML {
 	return func(name string, identifier string, attributes map[string]any, existingData any) htmltemplate.HTML {
 		if _, ok := componentMap[name]; !ok {
 			panic(fmt.Errorf("component %s not found", name))
@@ -88,60 +97,98 @@ func generateRenderFunc(t htmltemplate.Template, componentMap map[string]reflect
 		}
 
 		var b bytes.Buffer
-		fmt.Println("rendering", toRender.Kind())
-		fmt.Println("rendering", toRender.Type())
-		toCallRenderOn.Interface().(Renderable).Render(&b)
+		err := e.Render(&b, toCallRenderOn.Interface())
+		if err != nil {
+			panic(err)
+		}
 		return htmltemplate.HTML(b.String())
 	}
 
 }
 
-func Render(w io.Writer, r Renderable) error {
-	// TODO: return an error
-	r.Render(w)
+// Render renders the provided toRender value to the provided writer. `toRender` should
+// be a struct or a pointer to a struct that has been registered with the engine.
+func (e *Engine) Render(w io.Writer, toRender any) error {
+	v := reflect.ValueOf(toRender)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
 
-	return nil
-}
+	if template, ok := e.templateMap[v.Type().Name()]; ok {
+		err := template.Execute(w, toRender)
+		if err != nil {
+			return fmt.Errorf("error rendering component: %w", err)
+		}
 
-type Renderable interface {
-	// Render renders a struct into the provided io.Writer
-	Render(w io.Writer) // TODO: return an error
+		return nil
+	}
+
+	return fmt.Errorf("No component found for type %s", v.Type().Name())
 }
 
 type Template struct {
 	Name         string
-	pos          int
-	content      string
 	htmltemplate *htmltemplate.Template
+
+	// these are temporary until we have compilde into an htmltemplate
+	pos     int
+	content string
 }
 
-func (p *Engine) RegisterComponent(name string, value Renderable) error {
+func (e *Engine) RegisterComponent(value any, templateString string) error {
 	r := reflect.TypeOf(value)
 	if r.Kind() != reflect.Struct && (r.Kind() != reflect.Ptr && r.Elem().Kind() != reflect.Struct) {
 		return fmt.Errorf("provided value must be a struct or a pointer to a struct")
 	}
 
-	p.components[name] = reflect.TypeOf(value)
+	v := reflect.ValueOf(value)
+	if r.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	name := v.Type().Name()
+
+	e.components[name] = reflect.TypeOf(value)
+	template, err := e.parseTemplate(name, templateString)
+	if err != nil {
+		return fmt.Errorf("could not register template: %w", err)
+	}
+
+	e.templateMap[name] = template.htmltemplate
 
 	return nil
 }
 
-func (p *Engine) ParseTemplate(name, templateValue string) (*Template, error) {
+func (e *Engine) parseTemplate(name, templateValue string) (*Template, error) {
 	t := &Template{
 		Name: name,
 	}
 
-	t.Parse(templateValue, p.components)
-	// temporary until we have a compile step
+	// Normalize the template values for the parser+generator
+	componentNames := make(map[string]bool, len(e.components))
+	for k := range e.components {
+		componentNames[k] = true
+	}
+
+	// Parse the template to populate t.content and ensure we wipe it afterwards
+	t.Parse(templateValue, componentNames)
+	defer func() {
+		t.pos = 0
+		t.content = ""
+	}()
+
 	t.htmltemplate = htmltemplate.New(name)
 
+	// setup the functions, the renderer needs to be able to render components
+	// within the context of the engine and itself
 	funcs := htmltemplate.FuncMap{
-		"__goatRenderComponent": generateRenderFunc(*t.htmltemplate, p.components),
+		"__goatRenderComponent": generateRenderFunc(e, *t.htmltemplate, e.components),
 	}
-	for name, fn := range p.funcs {
+	for name, fn := range e.funcs {
 		funcs[name] = fn
 	}
 
+	// Parse the template using the html/template parser
 	var err error
 	t.htmltemplate.Funcs(funcs)
 	t.htmltemplate, err = t.htmltemplate.Parse(t.String())
@@ -207,7 +254,7 @@ func (n *Node) String() string {
 	return b.String()
 }
 
-func (t *Template) Parse(text string, components map[string]reflect.Type) {
+func (t *Template) Parse(text string, components map[string]bool) {
 	runes := []rune(text)
 	nodes := make([]*Node, 0)
 
@@ -233,17 +280,12 @@ func (t *Template) Parse(text string, components map[string]reflect.Type) {
 		}
 	}
 
-	// for _, n := range nodes {
-	// 	fmt.Println(n)
-	// }
-
 	t.content = compile(nodes)
-	// fmt.Println(t.content)
 }
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary
 // code to render a component
-func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*Node, error) {
+func (t *Template) parseTag(runes []rune, components map[string]bool) (*Node, error) {
 	start := t.pos
 
 	// We somehow got here without a <, this is a bug
@@ -459,7 +501,7 @@ func (t *Template) skipGoTemplate(runes []rune) {
 	t.pos += 2
 }
 
-func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]reflect.Type) ([]*Node, error) {
+func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
 	nodes := make([]*Node, 0)
 
 	start := t.pos

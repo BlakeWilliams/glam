@@ -1,15 +1,24 @@
 package example
 
 import (
-	"io"
+	"fmt"
+	"github.com/blakewilliams/goat/template"
+	stdtemplate "html/template"
 )
 
-// Render renders the Wrapper component
-func (Wrapper) Render(w io.Writer) {
-	// TODO
-}
+func NewEngine(funcs stdtemplate.FuncMap) (*template.Engine, error) {
+	e := template.New(funcs)
+	var err error
 
-// Render renders the Greeter component
-func (Greeter) Render(w io.Writer) {
-	// TODO
+	err = e.RegisterComponent(&Wrapper{}, "{{.WrapperStart}}\n{{Children}}\n{{.WrapperEnd}}\n")
+	if err != nil {
+		return nil, fmt.Errorf("failed to register component Wrapper: %w", err)
+	}
+
+	err = e.RegisterComponent(&Greeter{}, "<h1>Hi {{.Name}}</h1>\n")
+	if err != nil {
+		return nil, fmt.Errorf("failed to register component Greeter: %w", err)
+	}
+
+	return e, nil
 }
