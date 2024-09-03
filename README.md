@@ -10,7 +10,7 @@ GOAT takes an approach similar to [ViewComponent](https://viewcomponent.org/), u
 // GOAT uses comments to define components which will then be generated into an
 // implementation file.
 
-//goat:greet_page.html
+//goat:component greet_page.html
 type GreetPage struct {
   Name string
 }
@@ -31,7 +31,7 @@ The `GreetPage` struct instance will be passed to the `greet_page.html` template
 Let's say we want to reuse our YellName functionality in another component, but also **bold** the name. We can create a new component and reference the component directly in our `greet_page.html` template as if it was another element:
 
 ```go
-//goat:yell.html
+//goat:component yell.html
 type Yell struct {
   Name string
 }
