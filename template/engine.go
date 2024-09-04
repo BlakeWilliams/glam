@@ -48,16 +48,16 @@ func New(funcs htmltemplate.FuncMap) *Engine {
 	return e
 }
 
-// Render renders the provided toRender value to the provided writer. `toRender` should
+// Render renders the provided toRender value to the provided writer. `renderable` should
 // be a struct or a pointer to a struct that has been registered with the engine.
-func (e *Engine) Render(w io.Writer, toRender any) error {
-	v := reflect.ValueOf(toRender)
+func (e *Engine) Render(w io.Writer, renderable any) error {
+	v := reflect.ValueOf(renderable)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
 	if template, ok := e.templateMap[v.Type().Name()]; ok {
-		err := template.Execute(w, toRender)
+		err := template.Execute(w, renderable)
 		if err != nil {
 			return fmt.Errorf("error rendering component: %w", err)
 		}

@@ -4,13 +4,9 @@ GOAT is an attempt to make Go templates more component focused using the constra
 
 ## Usage
 
-GOAT takes an approach similar to [ViewComponent](https://viewcomponent.org/), using sidecar templates to define components. It differs though, in that it enhances `html/template` templates by automatically replacing component tags with their corresponding templates. Here's a small example:
+GOAT takes an approach similar to [ViewComponent](https://viewcomponent.org/), using sidecar templates to define components. In addition to coupling Go templates with structs, GOAT also allows enables a React style syntax for utilizing components in your templates.
 
 ```go
-// GOAT uses comments to define components which will then be generated into an
-// implementation file.
-
-//goat:component greet_page.html
 type GreetPage struct {
   Name string
 }
@@ -19,14 +15,18 @@ type GreetPage struct {
 func (g GreetPage) YellName() string {
   return strings.ToUpper(g.Name)
 }
+
+// Then, to render the template:
+engine := template.New(nil)
+engine.RegisterComponent(GreetPage{}, `Hello, {{.YellName}}`)
+
+var b strings.Builder
+engine.Render(&b, &GreetPage{Name: "World"})
 ```
 
 The `GreetPage` struct instance will be passed to the `greet_page.html` template as `data`, allowing you to access public fields and call methods on the struct.
 
-```html
-<!-- greet_page.html -->
-<h1>Hello, {{.Name}}!</h1>
-```
+### Composing components
 
 Let's say we want to reuse our YellName functionality in another component, but also **bold** the name. We can create a new component and reference the component directly in our `greet_page.html` template as if it was another element:
 
@@ -39,16 +39,11 @@ type Yell struct {
 func (y Yell) YellName() string {
   return strings.ToUpper(y.Name)
 }
-```
 
-```html
-<!-- yell.html -->
-<b>{{.YellName}}</b>
-```
-
-```html
-<!-- greet_page.html -->
-<h1>Hello, <Yell name="{{.Name}}" /></h1>
+// Lets update our GreetPage component to use our new Yell component
+engine.RegisterComponent(GreetPage{}, `Hello, <Yell Name={{.Name}}></Yell>`)
+// Let's also register our new Yell component
+engine.RegisterComponent(Yell{}, `<b>{{.YellName}}</b>`)
 ```
 
 The HTML is parsed and the `Yell` HTML tag is replaced with a call to render our Yell component.

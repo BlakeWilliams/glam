@@ -2,7 +2,6 @@ package template
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
 	"regexp"
 	"testing"
@@ -45,7 +44,6 @@ func TestTemplateParse_Nested(t *testing.T) {
 		nestedTemplate,
 	)
 	require.NoError(t, err)
-	fmt.Println(engine)
 
 	tmpl, err := engine.parseTemplate("main.goat.html", `
 		<b>
