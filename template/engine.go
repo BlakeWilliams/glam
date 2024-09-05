@@ -98,9 +98,7 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 }
 
 func (e *Engine) parseTemplate(name, templateValue string) error {
-	t := &goatTemplate{
-		Name: name,
-	}
+	t := newTemplate(name, templateValue)
 
 	// Normalize the template values for the parser+generator
 	componentNames := make(map[string]bool, len(e.components))
@@ -122,15 +120,6 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 		delete(e.recompileMap, name)
 	}
 
-	// Parse the template to populate t.content and ensure we wipe it afterwards
-	t.parse(templateValue, componentNames)
-	defer func() {
-		t.pos = 0
-		t.content = ""
-	}()
-
-	t.htmltemplate = htmltemplate.New(name)
-
 	// setup the functions, the renderer needs to be able to render components
 	// within the context of the engine and itself
 	funcs := htmltemplate.FuncMap{
@@ -140,12 +129,10 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 		funcs[name] = fn
 	}
 
-	// Parse the template using the html/template parser
-	var err error
-	t.htmltemplate.Funcs(funcs)
-	t.htmltemplate, err = t.htmltemplate.Parse(t.content)
+	// Parse and compile the template
+	err := t.parse(funcs, componentNames)
 	if err != nil {
-		return fmt.Errorf("error parsing template: %w", err)
+		return fmt.Errorf("could not parse template: %w", err)
 	}
 
 	// Register potentially referenced components with the engine so we can

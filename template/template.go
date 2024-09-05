@@ -12,8 +12,7 @@ type goatTemplate struct {
 	rawContent   string
 
 	// these are temporary until we have compilde into an htmltemplate
-	pos     int
-	content string
+	pos int
 
 	// potentialReferencedComponents is a map of component names that are
 	// referenced in the template, but not registered with the engine. This
@@ -22,19 +21,43 @@ type goatTemplate struct {
 	potentialReferencedComponents map[string]bool
 }
 
-func (t *goatTemplate) parse(text string, components map[string]bool) {
-	t.rawContent = text
+func newTemplate(name string, rawTemplate string) *goatTemplate {
+	return &goatTemplate{
+		Name:         name,
+		htmltemplate: htmltemplate.New(name),
+		rawContent:   rawTemplate,
+	}
+}
+
+func (t *goatTemplate) parse(funcs htmltemplate.FuncMap, components map[string]bool) error {
 	t.potentialReferencedComponents = make(map[string]bool)
 
 	// If we have no potentially referenced components that might require
 	// recompilation, we can save some space and remove the content
 	defer func() {
+		t.pos = 0
 		if len(t.potentialReferencedComponents) == 0 {
 			t.rawContent = ""
 		}
 	}()
 
-	runes := []rune(text)
+	// turn template into AST nodes
+	nodes := t.parseRoot([]rune(t.rawContent), components)
+
+	// Turn nodes into an html/template compatible string
+	content := compile(nodes)
+
+	var err error
+	t.htmltemplate.Funcs(funcs)
+	t.htmltemplate, err = t.htmltemplate.Parse(content)
+	if err != nil {
+		return fmt.Errorf("error parsing template: %w", err)
+	}
+
+	return nil
+}
+
+func (t *goatTemplate) parseRoot(runes []rune, components map[string]bool) []*Node {
 	nodes := make([]*Node, 0)
 
 	start := t.pos
@@ -59,7 +82,7 @@ func (t *goatTemplate) parse(text string, components map[string]bool) {
 		}
 	}
 
-	t.content = compile(nodes)
+	return nodes
 }
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary

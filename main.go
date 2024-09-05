@@ -32,7 +32,6 @@ func main() {
 					if err := generator.Compile(directory); err != nil {
 						return fmt.Errorf("failed to compile: %w", err)
 					}
-					fmt.Println("OK")
 
 					return nil
 				},

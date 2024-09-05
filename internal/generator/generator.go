@@ -125,11 +125,6 @@ func componentsFromFile(file string) ([]component, error) {
 		return nil, fmt.Errorf("failed to parse file: %w", err)
 	}
 
-	// for _, comment := range node
-	// 	fmt.Println()
-	// 	fmt.Println(comment.Text())
-	// }
-
 	components := make([]component, 0, 10)
 	packageName := node.Name.Name
 
