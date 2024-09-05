@@ -62,7 +62,7 @@ func (e *Engine) Render(w io.Writer, renderable any) error {
 	}
 
 	if template, ok := e.templateMap[v.Type().Name()]; ok {
-		err := template.htmltemplate.Execute(w, renderable)
+		err := template.Execute(w, renderable)
 		if err != nil {
 			return fmt.Errorf("error rendering component: %w", err)
 		}

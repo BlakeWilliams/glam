@@ -3,6 +3,7 @@ package template
 import (
 	"fmt"
 	htmltemplate "html/template"
+	"io"
 	"unicode"
 )
 
@@ -27,6 +28,11 @@ func newTemplate(name string, rawTemplate string) *goatTemplate {
 		htmltemplate: htmltemplate.New(name),
 		rawContent:   rawTemplate,
 	}
+}
+
+// Execute delegates to the underlying html/template
+func (t *goatTemplate) Execute(w io.Writer, data any) error {
+	return t.htmltemplate.Execute(w, data)
 }
 
 func (t *goatTemplate) parse(funcs htmltemplate.FuncMap, components map[string]bool) error {
