@@ -45,7 +45,7 @@ func TestTemplateParse_Nested(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	tmpl, err := engine.parseTemplate("main.goat.html", `
+	err = engine.parseTemplate("main.goat.html", `
 		<b>
 			Hello
 			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
@@ -56,10 +56,46 @@ func TestTemplateParse_Nested(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
+	tmpl := engine.templateMap["main.goat.html"]
+
 	var b bytes.Buffer
 	err = tmpl.htmltemplate.Execute(&b, map[string]any{"Age": 32})
 	require.NoError(t, err)
-	fmt.Println("output!", b.String())
+	require.Regexp(t, regexp.MustCompile(`<b>\s+Hello`), b.String())
+	require.Contains(t, b.String(), "Name: Fox Mulder")
+	require.Contains(t, b.String(), "Age: 32")
+	require.Regexp(t, regexp.MustCompile(`<article>\s+Foo`), b.String())
+	require.Regexp(t, regexp.MustCompile(`</b>`), b.String())
+}
+
+type GreetingPage struct {
+	Name string
+}
+
+var greetingTemplate = `<b>
+	Hello
+	<WrapperComponent rad Name="{{.Name}}" Age="{{32}}">
+		<NestedComponent>
+		Foo
+		</NestedComponent>
+	</WrapperComponent>
+</b>`
+
+func TestTemplateParse_Nested_ReverseRegister(t *testing.T) {
+	engine := New(nil)
+
+	err := engine.RegisterComponent(&GreetingPage{}, greetingTemplate)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&WrapperComponent{}, wrapperTemplate)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&NestedComponent{}, nestedTemplate)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.Render(&b, &GreetingPage{Name: "Fox Mulder"})
+	require.NoError(t, err)
 	require.Regexp(t, regexp.MustCompile(`<b>\s+Hello`), b.String())
 	require.Contains(t, b.String(), "Name: Fox Mulder")
 	require.Contains(t, b.String(), "Age: 32")
@@ -73,8 +109,10 @@ func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
 		return "http://localhost:3000/sign-up"
 	}
 
-	tmpl, err := engine.parseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
+	err := engine.parseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
 	require.NoError(t, err)
+
+	tmpl := engine.templateMap["main.goat.html"]
 
 	var b bytes.Buffer
 	err = tmpl.htmltemplate.Execute(&b, nil)

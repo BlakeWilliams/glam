@@ -15,14 +15,19 @@ type Engine struct {
 	// it's used to determine if a tag is a component and should be rendered as such _and_
 	// to instantiate the component in the generated code
 	components  map[string]reflect.Type
-	templateMap map[string]*htmltemplate.Template
+	templateMap map[string]*goatTemplate
 	funcs       htmltemplate.FuncMap
+
+	// recompileMap tracks components that were parsed in component templates
+	// but not registered, so were compiled as raw HTML.
+	recompileMap map[string][]*goatTemplate
 }
 
 func New(funcs htmltemplate.FuncMap) *Engine {
 	e := &Engine{
-		components:  make(map[string]reflect.Type),
-		templateMap: make(map[string]*htmltemplate.Template),
+		components:   make(map[string]reflect.Type),
+		templateMap:  make(map[string]*goatTemplate),
+		recompileMap: make(map[string][]*goatTemplate),
 	}
 
 	e.funcs = htmltemplate.FuncMap{
@@ -57,7 +62,7 @@ func (e *Engine) Render(w io.Writer, renderable any) error {
 	}
 
 	if template, ok := e.templateMap[v.Type().Name()]; ok {
-		err := template.Execute(w, renderable)
+		err := template.htmltemplate.Execute(w, renderable)
 		if err != nil {
 			return fmt.Errorf("error rendering component: %w", err)
 		}
@@ -68,6 +73,9 @@ func (e *Engine) Render(w io.Writer, renderable any) error {
 	return fmt.Errorf("No component found for type %s", v.Type().Name())
 }
 
+// RegisterComponent registers a component with the engine. The provided value must be a struct
+// or a pointer to a struct. The provided template string will be parsed and the component will be
+// rendered using the provided template.
 func (e *Engine) RegisterComponent(value any, templateString string) error {
 	r := reflect.TypeOf(value)
 	if r.Kind() != reflect.Struct && (r.Kind() != reflect.Ptr && r.Elem().Kind() != reflect.Struct) {
@@ -80,19 +88,16 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 	}
 
 	name := v.Type().Name()
-
 	e.components[name] = reflect.TypeOf(value)
-	template, err := e.parseTemplate(name, templateString)
+	err := e.parseTemplate(name, templateString)
 	if err != nil {
 		return fmt.Errorf("could not register template: %w", err)
 	}
 
-	e.templateMap[name] = template.htmltemplate
-
 	return nil
 }
 
-func (e *Engine) parseTemplate(name, templateValue string) (*goatTemplate, error) {
+func (e *Engine) parseTemplate(name, templateValue string) error {
 	t := &goatTemplate{
 		Name: name,
 	}
@@ -101,6 +106,20 @@ func (e *Engine) parseTemplate(name, templateValue string) (*goatTemplate, error
 	componentNames := make(map[string]bool, len(e.components))
 	for k := range e.components {
 		componentNames[k] = true
+	}
+	componentNames[name] = true
+
+	// Recompile any templates that were parsed as raw HTML because this component
+	// wasn't registered yet
+	if templates, ok := e.recompileMap[name]; ok {
+		for _, t := range templates {
+			err := e.parseTemplate(t.Name, t.rawContent)
+			if err != nil {
+				return fmt.Errorf("could not recompile template: %w", err)
+			}
+		}
+
+		delete(e.recompileMap, name)
 	}
 
 	// Parse the template to populate t.content and ensure we wipe it afterwards
@@ -126,10 +145,22 @@ func (e *Engine) parseTemplate(name, templateValue string) (*goatTemplate, error
 	t.htmltemplate.Funcs(funcs)
 	t.htmltemplate, err = t.htmltemplate.Parse(t.content)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing template: %w", err)
+		return fmt.Errorf("error parsing template: %w", err)
 	}
 
-	return t, nil
+	// Register potentially referenced components with the engine so we can
+	// recompile this template if the referenced component is registered later.
+	for k, _ := range t.potentialReferencedComponents {
+		if _, ok := e.recompileMap[k]; !ok {
+			e.recompileMap[k] = make([]*goatTemplate, 0)
+		}
+
+		e.recompileMap[k] = append(e.recompileMap[k], t)
+	}
+
+	e.templateMap[name] = t
+
+	return nil
 }
 
 func (e *Engine) generateRenderFunc(t *htmltemplate.Template, componentMap map[string]reflect.Type) func(string, string, map[string]any, any) htmltemplate.HTML {

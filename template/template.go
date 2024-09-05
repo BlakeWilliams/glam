@@ -9,10 +9,17 @@ import (
 type goatTemplate struct {
 	Name         string
 	htmltemplate *htmltemplate.Template
+	rawContent   string
 
 	// these are temporary until we have compilde into an htmltemplate
 	pos     int
 	content string
+
+	// potentialReferencedComponents is a map of component names that are
+	// referenced in the template, but not registered with the engine. This
+	// allows us to track references and recompile components when dependent
+	// components are registered.
+	potentialReferencedComponents map[string]bool
 }
 
 func (t *goatTemplate) parse(text string, components map[string]bool) {
@@ -117,11 +124,14 @@ func (t *goatTemplate) parseTag(runes []rune, components map[string]bool) (*Node
 					Attributes: attrs,
 					Children:   children,
 				}, nil
-
 			}
 
 			// skip the >
 			t.pos++
+
+			// Keep track of this potential component so we can recompile the
+			// template if it's registered
+			t.potentialReferencedComponents[string(tagName)] = true
 
 			return &Node{
 				Type: NodeTypeRaw,
