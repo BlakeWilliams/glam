@@ -45,7 +45,7 @@ func TestTemplateParse_Nested(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = engine.parseTemplate("main.goat.html", `
+	err = engine.parseTemplate("main.glam.html", `
 		<b>
 			Hello
 			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
@@ -56,7 +56,7 @@ func TestTemplateParse_Nested(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	tmpl := engine.templateMap["main.goat.html"]
+	tmpl := engine.templateMap["main.glam.html"]
 
 	var b bytes.Buffer
 	err = tmpl.htmltemplate.Execute(&b, map[string]any{"Age": 32})
@@ -109,10 +109,10 @@ func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
 		return "http://localhost:3000/sign-up"
 	}
 
-	err := engine.parseTemplate("main.goat.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
+	err := engine.parseTemplate("main.glam.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
 	require.NoError(t, err)
 
-	tmpl := engine.templateMap["main.goat.html"]
+	tmpl := engine.templateMap["main.glam.html"]
 
 	var b bytes.Buffer
 	err = tmpl.htmltemplate.Execute(&b, nil)

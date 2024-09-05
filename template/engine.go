@@ -15,25 +15,25 @@ type Engine struct {
 	// it's used to determine if a tag is a component and should be rendered as such _and_
 	// to instantiate the component in the generated code
 	components  map[string]reflect.Type
-	templateMap map[string]*goatTemplate
+	templateMap map[string]*glamTemplate
 	funcs       htmltemplate.FuncMap
 
 	// recompileMap tracks components that were parsed in component templates
 	// but not registered, so were compiled as raw HTML.
-	recompileMap map[string][]*goatTemplate
+	recompileMap map[string][]*glamTemplate
 }
 
 func New(funcs htmltemplate.FuncMap) *Engine {
 	e := &Engine{
 		components:   make(map[string]reflect.Type),
-		templateMap:  make(map[string]*goatTemplate),
-		recompileMap: make(map[string][]*goatTemplate),
+		templateMap:  make(map[string]*glamTemplate),
+		recompileMap: make(map[string][]*glamTemplate),
 	}
 
 	e.funcs = htmltemplate.FuncMap{
-		"__goatDict": func(args ...any) map[string]any {
+		"__glamDict": func(args ...any) map[string]any {
 			if len(args)%2 != 0 {
-				panic("invalid number of arguments to __goatDict")
+				panic("invalid number of arguments passed to __glamDict")
 			}
 
 			dict := make(map[string]any, len(args)/2)
@@ -123,7 +123,7 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 	// setup the functions, the renderer needs to be able to render components
 	// within the context of the engine and itself
 	funcs := htmltemplate.FuncMap{
-		"__goatRenderComponent": e.generateRenderFunc(t.htmltemplate, e.components),
+		"__glamRenderComponent": e.generateRenderFunc(t.htmltemplate, e.components),
 	}
 	for name, fn := range e.funcs {
 		funcs[name] = fn
@@ -139,7 +139,7 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 	// recompile this template if the referenced component is registered later.
 	for k, _ := range t.potentialReferencedComponents {
 		if _, ok := e.recompileMap[k]; !ok {
-			e.recompileMap[k] = make([]*goatTemplate, 0)
+			e.recompileMap[k] = make([]*glamTemplate, 0)
 		}
 
 		e.recompileMap[k] = append(e.recompileMap[k], t)
@@ -205,7 +205,7 @@ func (e *Engine) generateRenderFunc(t *htmltemplate.Template, componentMap map[s
 
 }
 
-func (t *goatTemplate) skipWhitespace(runes []rune) {
+func (t *glamTemplate) skipWhitespace(runes []rune) {
 	for unicode.IsSpace(runes[t.pos]) {
 		t.pos++
 	}

@@ -14,7 +14,7 @@ type define struct {
 func newDefine(node *Node) *define {
 	return &define{
 		Node:       node,
-		identifier: fmt.Sprintf("goat__%s__%s", node.TagName, randomString()),
+		identifier: fmt.Sprintf("glam__%s__%s", node.TagName, randomString()),
 	}
 }
 func compile(nodes []*Node) string {
@@ -45,7 +45,7 @@ func rawCompile(nodes []*Node) (primaryContent string, defineContent []string) {
 
 			var attributes strings.Builder
 
-			attributes.WriteString(`(__goatDict`)
+			attributes.WriteString(`(__glamDict`)
 
 			for k, v := range node.Attributes {
 				if strings.HasPrefix(v, "{{") {
@@ -57,9 +57,9 @@ func rawCompile(nodes []*Node) (primaryContent string, defineContent []string) {
 			}
 
 			attributes.WriteString(`)`)
-			rawContent.WriteString(fmt.Sprintf(`{{__goatRenderComponent "%s" "%s" %s .}}`, node.TagName, definition.identifier, attributes.String()))
+			rawContent.WriteString(fmt.Sprintf(`{{__glamRenderComponent "%s" "%s" %s .}}`, node.TagName, definition.identifier, attributes.String()))
 		case node.Type == NodeTypeComponent && len(node.Children) == 0:
-			rawContent.WriteString(fmt.Sprintf(`{{__goatRenderComponent "%s" "" nil .}}`, node.TagName))
+			rawContent.WriteString(fmt.Sprintf(`{{__glamRenderComponent "%s" "" nil .}}`, node.TagName))
 		}
 	}
 

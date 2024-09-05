@@ -48,7 +48,7 @@ func (c component) TemplateContent(validComponents map[string]bool) string {
 }
 
 // compile reads the go files in the given directory and generates the relevant
-// `Render` methods for structs marked as components via `goat:component`.
+// `Render` methods for structs marked as components via `glam:component`.
 func Compile(directory string) error {
 	files, err := os.ReadDir(directory)
 	if err != nil {
@@ -158,12 +158,12 @@ func componentsFromFile(file string) ([]component, error) {
 				return true
 			}
 
-			// find the goat:component comment if any, and add it to the comment map
+			// find the glam:component comment if any, and add it to the comment map
 			for _, comment := range gd.Doc.List {
-				if strings.HasPrefix(comment.Text, "//goat:component") {
-					name := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//goat:component"))
+				if strings.HasPrefix(comment.Text, "//glam:component") {
+					name := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//glam:component"))
 					if name == "" {
-						fmt.Printf("WARNING: goat:component comment found for `%s`, but no template name provided", structName)
+						fmt.Printf("WARNING: glam:component comment found for `%s`, but no template name provided", structName)
 					}
 
 					components = append(
@@ -205,10 +205,10 @@ func componentsFromFile(file string) ([]component, error) {
 				}
 
 				for _, comment := range ts.Doc.List {
-					if strings.HasPrefix(comment.Text, "//goat:component") {
-						name := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//goat:component"))
+					if strings.HasPrefix(comment.Text, "//glam:component") {
+						name := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//glam:component"))
 						if name == "" {
-							fmt.Printf("WARNING: goat:component comment found for `%s`, but no template name provided", structName)
+							fmt.Printf("WARNING: glam:component comment found for `%s`, but no template name provided", structName)
 						}
 
 						components = append(
@@ -242,7 +242,7 @@ func generateFile(components []component) string {
 
 	import (
 		"fmt"
-		"github.com/blakewilliams/goat/template"
+		"github.com/blakewilliams/glam/template"
 		stdtemplate "html/template"
 	)
 

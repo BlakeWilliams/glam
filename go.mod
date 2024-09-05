@@ -1,4 +1,4 @@
-module github.com/blakewilliams/goat
+module github.com/blakewilliams/glam
 
 go 1.23.0
 

@@ -7,7 +7,7 @@ import (
 	"unicode"
 )
 
-type goatTemplate struct {
+type glamTemplate struct {
 	Name         string
 	htmltemplate *htmltemplate.Template
 	rawContent   string
@@ -22,8 +22,8 @@ type goatTemplate struct {
 	potentialReferencedComponents map[string]bool
 }
 
-func newTemplate(name string, rawTemplate string) *goatTemplate {
-	return &goatTemplate{
+func newTemplate(name string, rawTemplate string) *glamTemplate {
+	return &glamTemplate{
 		Name:         name,
 		htmltemplate: htmltemplate.New(name),
 		rawContent:   rawTemplate,
@@ -31,11 +31,11 @@ func newTemplate(name string, rawTemplate string) *goatTemplate {
 }
 
 // Execute delegates to the underlying html/template
-func (t *goatTemplate) Execute(w io.Writer, data any) error {
+func (t *glamTemplate) Execute(w io.Writer, data any) error {
 	return t.htmltemplate.Execute(w, data)
 }
 
-func (t *goatTemplate) parse(funcs htmltemplate.FuncMap, components map[string]bool) error {
+func (t *glamTemplate) parse(funcs htmltemplate.FuncMap, components map[string]bool) error {
 	t.potentialReferencedComponents = make(map[string]bool)
 
 	// If we have no potentially referenced components that might require
@@ -63,7 +63,7 @@ func (t *goatTemplate) parse(funcs htmltemplate.FuncMap, components map[string]b
 	return nil
 }
 
-func (t *goatTemplate) parseRoot(runes []rune, components map[string]bool) []*Node {
+func (t *glamTemplate) parseRoot(runes []rune, components map[string]bool) []*Node {
 	nodes := make([]*Node, 0)
 
 	start := t.pos
@@ -93,7 +93,7 @@ func (t *goatTemplate) parseRoot(runes []rune, components map[string]bool) []*No
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary
 // code to render a component
-func (t *goatTemplate) parseTag(runes []rune, components map[string]bool) (*Node, error) {
+func (t *glamTemplate) parseTag(runes []rune, components map[string]bool) (*Node, error) {
 	start := t.pos
 
 	// We somehow got here without a <, this is a bug
@@ -212,7 +212,7 @@ func (t *goatTemplate) parseTag(runes []rune, components map[string]bool) (*Node
 	}, nil
 }
 
-func (t *goatTemplate) parseAttributes(runes []rune) (map[string]string, error) {
+func (t *glamTemplate) parseAttributes(runes []rune) (map[string]string, error) {
 	attributes := make(map[string]string)
 
 	// If we have a > we can return the attributes as-is
@@ -266,7 +266,7 @@ func (t *goatTemplate) parseAttributes(runes []rune) (map[string]string, error) 
 	return attributes, nil
 }
 
-func (t *goatTemplate) parseQuotedAttribute(runes []rune) ([]rune, error) {
+func (t *glamTemplate) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	// Get the quote character and skip it
 	// TODO: this could be a "quoteless" attribute, so we need to handle that at
 	// some point
@@ -297,7 +297,7 @@ func (t *goatTemplate) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	}
 }
 
-func (t *goatTemplate) skipGoTemplate(runes []rune) {
+func (t *glamTemplate) skipGoTemplate(runes []rune) {
 	// skip the {{
 	t.pos += 2
 
@@ -312,7 +312,7 @@ func (t *goatTemplate) skipGoTemplate(runes []rune) {
 	t.pos += 2
 }
 
-func (t *goatTemplate) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
+func (t *glamTemplate) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
 	nodes := make([]*Node, 0)
 
 	start := t.pos

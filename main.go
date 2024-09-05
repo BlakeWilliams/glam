@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/blakewilliams/goat/internal/generator"
+	"github.com/blakewilliams/glam/internal/generator"
 	"github.com/urfave/cli"
 )
 
 func main() {
 	app := &cli.App{
-		Name:  "goat",
-		Usage: "GOAT generates components from Go structs",
+		Name:  "glam",
+		Usage: "glam generates components from Go structs",
 		Commands: []cli.Command{
 			{
 				Name:    "generate",
