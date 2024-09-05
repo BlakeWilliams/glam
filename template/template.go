@@ -23,6 +23,17 @@ type goatTemplate struct {
 }
 
 func (t *goatTemplate) parse(text string, components map[string]bool) {
+	t.rawContent = text
+	t.potentialReferencedComponents = make(map[string]bool)
+
+	// If we have no potentially referenced components that might require
+	// recompilation, we can save some space and remove the content
+	defer func() {
+		if len(t.potentialReferencedComponents) == 0 {
+			t.rawContent = ""
+		}
+	}()
+
 	runes := []rune(text)
 	nodes := make([]*Node, 0)
 
