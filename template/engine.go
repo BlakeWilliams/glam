@@ -137,7 +137,7 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 
 	// Register potentially referenced components with the engine so we can
 	// recompile this template if the referenced component is registered later.
-	for k, _ := range t.potentialReferencedComponents {
+	for k := range t.potentialReferencedComponents {
 		if _, ok := e.recompileMap[k]; !ok {
 			e.recompileMap[k] = make([]*glamTemplate, 0)
 		}
