@@ -5,25 +5,32 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"io"
+	"os"
 	"reflect"
 	"unicode"
 )
 
-// Engine is a template engine that can be used to render components
-type Engine struct {
-	// components is a map of component names that are available in the template
-	// it's used to determine if a tag is a component and should be rendered as such _and_
-	// to instantiate the component in the generated code
-	components  map[string]reflect.Type
-	templateMap map[string]*glamTemplate
-	funcs       htmltemplate.FuncMap
+type (
+	FuncMap = htmltemplate.FuncMap
 
-	// recompileMap tracks components that were parsed in component templates
-	// but not registered, so were compiled as raw HTML.
-	recompileMap map[string][]*glamTemplate
-}
+	// Engine is a template engine that can be used to render components
+	Engine struct {
+		// components is a map of component names that are available in the template
+		// it's used to determine if a tag is a component and should be rendered as such _and_
+		// to instantiate the component in the generated code
+		components  map[string]reflect.Type
+		templateMap map[string]*glamTemplate
+		funcs       htmltemplate.FuncMap
 
-func New(funcs htmltemplate.FuncMap) *Engine {
+		// recompileMap tracks components that were parsed in component templates
+		// but not registered, so were compiled as raw HTML.
+		recompileMap map[string][]*glamTemplate
+	}
+)
+
+// New creates a new template engine that can be used to register and render components
+// to be rendered.
+func New(funcs FuncMap) *Engine {
 	e := &Engine{
 		components:   make(map[string]reflect.Type),
 		templateMap:  make(map[string]*glamTemplate),
@@ -95,6 +102,17 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 	}
 
 	return nil
+}
+
+// RegisterComponentFS registeres the given component with the engine, reading
+// the file at the given path and using it as the template for the component.
+func (e *Engine) RegisterComponentFS(value any, filePath string) error {
+	c, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("could not read file: %w", err)
+	}
+
+	return e.RegisterComponent(value, string(c))
 }
 
 func (e *Engine) parseTemplate(name, templateValue string) error {

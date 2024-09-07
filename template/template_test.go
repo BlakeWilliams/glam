@@ -104,10 +104,11 @@ func TestTemplateParse_Nested_ReverseRegister(t *testing.T) {
 }
 
 func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
-	engine := New(nil)
-	engine.funcs["GenerateURL"] = func(name string) string {
-		return "http://localhost:3000/sign-up"
-	}
+	engine := New(FuncMap{
+		"GenerateURL": func(name string) string {
+			return "http://localhost:3000/sign-up"
+		},
+	})
 
 	err := engine.parseTemplate("main.glam.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
 	require.NoError(t, err)
@@ -119,4 +120,21 @@ func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Regexp(t, regexp.MustCompile(`<a href="http://localhost:3000/sign-up">Sign up</a>`), b.String())
+}
+
+type testFSComponent struct {
+	Value string
+}
+
+func TestEngineRegisterComponentFS(t *testing.T) {
+	engine := New(nil)
+
+	err := engine.RegisterComponentFS(&testFSComponent{}, "test.glam.html")
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.Render(&b, &testFSComponent{Value: "world!"})
+	require.NoError(t, err)
+
+	require.Contains(t, b.String(), "Testing, world!")
 }
