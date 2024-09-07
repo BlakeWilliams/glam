@@ -8,12 +8,12 @@ Glam takes an approach similar to [ViewComponent](https://viewcomponent.org/), u
 
 ```go
 type GreetPage struct {
-  Name string
+	Name string
 }
 
 // a Helper method we can use in our template
 func (g GreetPage) YellName() string {
-  return strings.ToUpper(g.Name)
+	return strings.ToUpper(g.Name)
 }
 
 // Then, to render the template:
@@ -32,11 +32,11 @@ Let's say we want to reuse our YellName functionality in another component, but 
 
 ```go
 type Yell struct {
-  Name string
+	Name string
 }
 
 func (y Yell) YellName() string {
-  return strings.ToUpper(y.Name)
+	return strings.ToUpper(y.Name)
 }
 
 // Lets update our GreetPage component to use our new Yell component
