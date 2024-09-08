@@ -450,7 +450,6 @@ func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 				// We're about to run another parser, so we need to capture the raw content
 				// if we've captured any content
 				if t.pos != start {
-					fmt.Println(t.pos, start)
 					nodes = append(nodes, &Node{
 						Type: NodeTypeRaw,
 						Raw:  string(runes[start : t.pos-1]),
