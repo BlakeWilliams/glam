@@ -46,3 +46,19 @@ engine.RegisterComponent(Yell{}, `<b>{{.YellName}}</b>`)
 ```
 
 The HTML is parsed and the `Yell` HTML tag is replaced with a call to render our Yell component.
+
+### Child content
+
+Since components can be used like HTML tags, that means they can have child content too. The current approach is relatively basic since it always expects a `template.HTML` value, but you can accept and render child content using the conventional `Children` struct field:
+
+```go
+type WrapperComponent struct {
+	Children template.HTML
+}
+```
+
+```html
+<WrapperComponent>Hello</WrapperComponent>
+```
+
+When the template above is executed, `WrapperComponent` will have `Children` populated with the HTML safe string `Hello`.
