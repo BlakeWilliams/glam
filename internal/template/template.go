@@ -211,49 +211,47 @@ func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*
 			}
 		// We're in a full tag
 		case '>':
-			{
-				// There's a choice to be made here, we could either:
-				//   - Parse the tag strictly until we find an end tag
-				//   - Continue reading "raw" content until we find another tag to parse
-				//
-				// This currently chooses the latter which is less strict and more
-				// error prone, but results in a faster implementation for now
+			// There's a choice to be made here, we could either:
+			//   - Parse the tag strictly until we find an end tag
+			//   - Continue reading "raw" content until we find another tag to parse
+			//
+			// This currently chooses the latter which is less strict and more
+			// error prone, but results in a faster implementation for now
 
-				// skip the >
-				t.pos++
+			// skip the >
+			t.pos++
 
-				// If we have a matching component, we need to return a component node instead
-				// of a raw node, which includes parsing content until we find the
-				// relevant end tag so it can be lifted into a `define` block later.
-				if _, ok := components[string(tagName)]; ok {
-					children, err := t.parseUntilCloseTag(runes, tagName, components)
-					if err != nil {
-						return nil, fmt.Errorf("error parsing children: %w", err)
-					}
-
-					return &Node{
-						Type:       NodeTypeComponent,
-						TagName:    string(tagName),
-						Attributes: attrs,
-						Children:   children,
-					}, nil
-				}
-
-				// skip the >
-				t.pos++
-
-				// If this isn't just a capitalized HTML tag, keep track of this
-				// potential component so we can recompile the template if it's
-				// registered
-				if !knownHTMLTags.IsKnown(string(tagName)) {
-					t.potentiallyReferencedComponents[string(tagName)] = true
+			// If we have a matching component, we need to return a component node instead
+			// of a raw node, which includes parsing content until we find the
+			// relevant end tag so it can be lifted into a `define` block later.
+			if _, ok := components[string(tagName)]; ok {
+				children, err := t.parseUntilCloseTag(runes, tagName, components)
+				if err != nil {
+					return nil, fmt.Errorf("error parsing children: %w", err)
 				}
 
 				return &Node{
-					Type: NodeTypeRaw,
-					Raw:  string(runes[start:t.pos]),
+					Type:       NodeTypeComponent,
+					TagName:    string(tagName),
+					Attributes: attrs,
+					Children:   children,
 				}, nil
 			}
+
+			// skip the >
+			t.pos++
+
+			// If this isn't just a capitalized HTML tag, keep track of this
+			// potential component so we can recompile the template if it's
+			// registered
+			if !knownHTMLTags.IsKnown(string(tagName)) {
+				t.potentiallyReferencedComponents[string(tagName)] = true
+			}
+
+			return &Node{
+				Type: NodeTypeRaw,
+				Raw:  string(runes[start:t.pos]),
+			}, nil
 		}
 	}
 
