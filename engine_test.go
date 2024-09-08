@@ -108,18 +108,18 @@ func TestTemplateParse_Nested_ReverseRegister(t *testing.T) {
 	require.Regexp(t, regexp.MustCompile(`</b>`), b.String())
 }
 
-type testFSComponent struct {
+type TestFSComponent struct {
 	Value string
 }
 
 func TestEngineRegisterComponentFS(t *testing.T) {
 	engine := New(nil)
 
-	err := engine.RegisterComponentFS(&testFSComponent{}, "internal/template/test.glam.html")
+	err := engine.RegisterComponentFS(&TestFSComponent{}, "internal/template/test.glam.html")
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = engine.Render(&b, &testFSComponent{Value: "world!"})
+	err = engine.Render(&b, &TestFSComponent{Value: "world!"})
 	require.NoError(t, err)
 
 	require.Contains(t, b.String(), "Testing, world!")

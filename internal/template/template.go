@@ -171,7 +171,7 @@ func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*
 		tagNameStart := t.pos
 
 		// loop until we find the end of tag name
-		for runes[t.pos] != ' ' && runes[t.pos] != '>' {
+		for runes[t.pos] != ' ' && runes[t.pos] != '>' && runes[t.pos] != '/' {
 			t.pos++
 		}
 
@@ -182,49 +182,78 @@ func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*
 			return nil, fmt.Errorf("error parsing attributes: %w", err)
 		}
 
-		// if we have no attributes, we can just skip to the end of the tag
-		if runes[t.pos] == '>' {
-			// There's a choice to be made here, we could either:
-			//   - Parse the tag strictly until we find an end tag
-			//   - Continue reading "raw" content until we find another tag to parse
-			//
-			// This currently chooses the latter which is less strict and more
-			// error prone, but results in a faster implementation for now
+		t.skipWhitespace(runes)
 
-			// skip the >
+		switch runes[t.pos] {
+		// we're in a self closing tag
+		case '/':
+			// skip the /
 			t.pos++
 
-			// If we have a matching component, we need to return a component node instead
-			// of a raw node, which includes parsing content until we find the
-			// relevant end tag so it can be lifted into a `define` block later.
-			if _, ok := components[string(tagName)]; ok {
-				children, err := t.parseUntilCloseTag(runes, tagName, components)
-				if err != nil {
-					return nil, fmt.Errorf("error parsing children: %w", err)
-				}
+			// Skip any accidental/unwanted whitespace
+			t.skipWhitespace(runes)
 
+			// Ensure we're actually closing the component
+			if runes[t.pos] != '>' {
+				return nil, fmt.Errorf("found invalid HTML")
+			}
+
+			// Skip the >
+			t.pos++
+
+			if _, ok := components[string(tagName)]; ok {
 				return &Node{
 					Type:       NodeTypeComponent,
 					TagName:    string(tagName),
 					Attributes: attrs,
-					Children:   children,
+					Children:   make([]*Node, 0),
 				}, nil
 			}
+		// We're in a full tag
+		case '>':
+			{
+				// There's a choice to be made here, we could either:
+				//   - Parse the tag strictly until we find an end tag
+				//   - Continue reading "raw" content until we find another tag to parse
+				//
+				// This currently chooses the latter which is less strict and more
+				// error prone, but results in a faster implementation for now
 
-			// skip the >
-			t.pos++
+				// skip the >
+				t.pos++
 
-			// If this isn't just a capitalized HTML tag, keep track of this
-			// potential component so we can recompile the template if it's
-			// registered
-			if !knownHTMLTags.IsKnown(string(tagName)) {
-				t.potentiallyReferencedComponents[string(tagName)] = true
+				// If we have a matching component, we need to return a component node instead
+				// of a raw node, which includes parsing content until we find the
+				// relevant end tag so it can be lifted into a `define` block later.
+				if _, ok := components[string(tagName)]; ok {
+					children, err := t.parseUntilCloseTag(runes, tagName, components)
+					if err != nil {
+						return nil, fmt.Errorf("error parsing children: %w", err)
+					}
+
+					return &Node{
+						Type:       NodeTypeComponent,
+						TagName:    string(tagName),
+						Attributes: attrs,
+						Children:   children,
+					}, nil
+				}
+
+				// skip the >
+				t.pos++
+
+				// If this isn't just a capitalized HTML tag, keep track of this
+				// potential component so we can recompile the template if it's
+				// registered
+				if !knownHTMLTags.IsKnown(string(tagName)) {
+					t.potentiallyReferencedComponents[string(tagName)] = true
+				}
+
+				return &Node{
+					Type: NodeTypeRaw,
+					Raw:  string(runes[start:t.pos]),
+				}, nil
 			}
-
-			return &Node{
-				Type: NodeTypeRaw,
-				Raw:  string(runes[start:t.pos]),
-			}, nil
 		}
 	}
 
@@ -233,7 +262,7 @@ func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*
 	//   - Parse the attributes
 
 	// loop until we find the end of tag name
-	for runes[t.pos] != ' ' && runes[t.pos] != '>' {
+	for runes[t.pos] != ' ' && runes[t.pos] != '>' && runes[t.pos] != '/' {
 		t.pos++
 	}
 
@@ -247,10 +276,16 @@ func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*
 	}
 	t.skipWhitespace(runes)
 
+	// Check if we're self-closing and skip over it
+	if runes[t.pos] == '/' {
+		t.pos++
+	}
+
 	// We would expect to find a > here, so let's double check and skip it
 	if runes[t.pos] != '>' {
 		panic("unexpected character when parsing tag")
 	}
+
 	// skip the >
 	t.pos++
 
@@ -270,7 +305,7 @@ func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 
 	t.skipWhitespace(runes)
 
-	for runes[t.pos] != '>' {
+	for runes[t.pos] != '>' && runes[t.pos] != '/' {
 		nameStart := t.pos
 		// Loop until we find the end of the attribute which can be:
 		//   - a space (boolean attribute)
@@ -283,6 +318,12 @@ func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 		name := runes[nameStart:t.pos]
 
 		switch runes[t.pos] {
+		// If we have a / we can consume it and subsequent whitespace and return attributes as-is
+		case '/':
+			t.pos++
+			t.skipWhitespace(runes)
+			attributes[string(name)] = "true"
+			return attributes, nil
 		// If we have a > we can return the attributes as-is
 		case '>':
 			attributes[string(name)] = "true"
@@ -407,10 +448,14 @@ func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components m
 				}
 			} else if unicode.IsLetter(runes[t.pos+1]) {
 				// We're about to run another parser, so we need to capture the raw content
-				nodes = append(nodes, &Node{
-					Type: NodeTypeRaw,
-					Raw:  string(runes[start : t.pos-1]),
-				})
+				// if we've captured any content
+				if t.pos != start {
+					fmt.Println(t.pos, start)
+					nodes = append(nodes, &Node{
+						Type: NodeTypeRaw,
+						Raw:  string(runes[start : t.pos-1]),
+					})
+				}
 
 				// We have a tag, so we need to parse it
 				n, err := t.parseTag(runes, components)

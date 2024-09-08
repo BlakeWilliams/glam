@@ -28,13 +28,24 @@ func (r *FakeRenderer) Render(w io.Writer, v any) error {
 		t = t.Elem()
 	}
 
-	_, _ = w.Write([]byte("<-- placeholder for " + t.String() + " -->"))
+	_, _ = w.Write([]byte("<!-- placeholder for " + t.Type().Name() + " -->"))
 
 	return nil
 }
 
 func (r *FakeRenderer) FuncMap() htmltemplate.FuncMap {
 	return r.funcMap
+}
+
+func NewFakeRenderer() *FakeRenderer {
+	return &FakeRenderer{
+		knownComponents: make(map[string]reflect.Type, 0),
+		funcMap: htmltemplate.FuncMap{
+			"__glamDict": func(pairs ...any) map[string]any {
+				return make(map[string]any)
+			},
+		},
+	}
 }
 
 func TestStandardGoTemplate(t *testing.T) {
@@ -91,4 +102,34 @@ func TestWipingRawContent(t *testing.T) {
 			}
 		})
 	}
+}
+
+type EmptyComponent struct{}
+
+func TestSelfClosingTemplate(t *testing.T) {
+	renderer := &FakeRenderer{knownComponents: make(map[string]reflect.Type)}
+	renderer.knownComponents["Test"] = reflect.TypeOf(&EmptyComponent{})
+
+	tmpl, err := New("testing", renderer, `hello <Test/>!`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = tmpl.Execute(&b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, b.String(), `hello <!-- placeholder for EmptyComponent -->`)
+}
+
+func TestSelfClosingNestedTags(t *testing.T) {
+	renderer := NewFakeRenderer()
+	renderer.knownComponents["Test"] = reflect.TypeOf(&EmptyComponent{})
+
+	tmpl, err := New("testing", renderer, `hello <Test><img foo="bar"/>Hello</Test>!`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = tmpl.Execute(&b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, b.String(), `hello <!-- placeholder for EmptyComponent -->`)
 }
