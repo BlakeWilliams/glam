@@ -1,13 +1,14 @@
-package template
+package glam
 
 import (
-	"bytes"
 	"fmt"
 	htmltemplate "html/template"
 	"io"
 	"os"
 	"reflect"
 	"unicode"
+
+	"github.com/blakewilliams/glam/internal/template"
 )
 
 type (
@@ -19,12 +20,12 @@ type (
 		// it's used to determine if a tag is a component and should be rendered as such _and_
 		// to instantiate the component in the generated code
 		components  map[string]reflect.Type
-		templateMap map[string]*glamTemplate
+		templateMap map[string]*template.Template
 		funcs       htmltemplate.FuncMap
 
 		// recompileMap tracks components that were parsed in component templates
 		// but not registered, so were compiled as raw HTML.
-		recompileMap map[string][]*glamTemplate
+		recompileMap map[string][]*template.Template
 	}
 )
 
@@ -33,24 +34,12 @@ type (
 func New(funcs FuncMap) *Engine {
 	e := &Engine{
 		components:   make(map[string]reflect.Type),
-		templateMap:  make(map[string]*glamTemplate),
-		recompileMap: make(map[string][]*glamTemplate),
+		templateMap:  make(map[string]*template.Template),
+		recompileMap: make(map[string][]*template.Template),
 	}
 
 	e.funcs = htmltemplate.FuncMap{
-		"__glamDict": func(args ...any) map[string]any {
-			if len(args)%2 != 0 {
-				panic("invalid number of arguments passed to __glamDict")
-			}
-
-			dict := make(map[string]any, len(args)/2)
-
-			for i := 0; i < len(args); i += 2 {
-				dict[args[i].(string)] = args[i+1]
-			}
-
-			return dict
-		},
+		"__glamDict": Dict,
 	}
 
 	for k, v := range funcs {
@@ -95,6 +84,11 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 	}
 
 	name := v.Type().Name()
+	// We need access to public structs, so disallow private structs
+	if unicode.IsLower([]rune(name)[0]) {
+		return fmt.Errorf("component %s is private, registered components must be public", name)
+	}
+
 	e.components[name] = reflect.TypeOf(value)
 	err := e.parseTemplate(name, templateString)
 	if err != nil {
@@ -115,21 +109,22 @@ func (e *Engine) RegisterComponentFS(value any, filePath string) error {
 	return e.RegisterComponent(value, string(c))
 }
 
+// KnownComponents returns a map of known component names
+func (e *Engine) KnownComponents() map[string]reflect.Type {
+	return e.components
+}
+
+// Funcs :nodoc:
+func (e *Engine) FuncMap() FuncMap {
+	return e.funcs
+}
+
 func (e *Engine) parseTemplate(name, templateValue string) error {
-	t := newTemplate(name, templateValue)
-
-	// Normalize the template values for the parser+generator
-	componentNames := make(map[string]bool, len(e.components))
-	for k := range e.components {
-		componentNames[k] = true
-	}
-	componentNames[name] = true
-
 	// Recompile any templates that were parsed as raw HTML because this component
 	// wasn't registered yet
 	if templates, ok := e.recompileMap[name]; ok {
 		for _, t := range templates {
-			err := e.parseTemplate(t.Name, t.rawContent)
+			err := e.parseTemplate(t.Name, t.RawContent())
 			if err != nil {
 				return fmt.Errorf("could not recompile template: %w", err)
 			}
@@ -138,26 +133,16 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 		delete(e.recompileMap, name)
 	}
 
-	// setup the functions, the renderer needs to be able to render components
-	// within the context of the engine and itself
-	funcs := htmltemplate.FuncMap{
-		"__glamRenderComponent": e.generateRenderFunc(t.htmltemplate, e.components),
-	}
-	for name, fn := range e.funcs {
-		funcs[name] = fn
-	}
-
-	// Parse and compile the template
-	err := t.parse(funcs, componentNames)
+	t, err := template.New(name, e, templateValue)
 	if err != nil {
-		return fmt.Errorf("could not parse template: %w", err)
+		return err
 	}
 
 	// Register potentially referenced components with the engine so we can
 	// recompile this template if the referenced component is registered later.
-	for k := range t.potentialReferencedComponents {
+	for k := range t.ComponentsPotentiallyReferenced() {
 		if _, ok := e.recompileMap[k]; !ok {
-			e.recompileMap[k] = make([]*glamTemplate, 0)
+			e.recompileMap[k] = make([]*template.Template, 0)
 		}
 
 		e.recompileMap[k] = append(e.recompileMap[k], t)
@@ -168,63 +153,18 @@ func (e *Engine) parseTemplate(name, templateValue string) error {
 	return nil
 }
 
-func (e *Engine) generateRenderFunc(t *htmltemplate.Template, componentMap map[string]reflect.Type) func(string, string, map[string]any, any) htmltemplate.HTML {
-	return func(name string, identifier string, attributes map[string]any, existingData any) htmltemplate.HTML {
-		if _, ok := componentMap[name]; !ok {
-			panic(fmt.Errorf("component %s not found", name))
-		}
-
-		// Get the type of the component, and if it's a pointer, get the underlying type
-		// so we can create a new instance of it
-		componentType := componentMap[name]
-		isPointer := componentType.Kind() == reflect.Ptr
-		if isPointer {
-			componentType = componentType.Elem()
-		}
-
-		// Create a new instance of the component
-		toRender := reflect.New(componentType)
-		toCallRenderOn := toRender
-		if isPointer {
-			toRender = toRender.Elem()
-		}
-
-		// Loop through the attributes and set them on the component
-		for i := 0; i < componentType.NumField(); i++ {
-			fieldType := componentType.Field(i)
-			field := toRender.Field(i)
-			if !field.CanSet() {
-				continue
-			}
-
-			if fieldType.Name == "Children" {
-				var b bytes.Buffer
-				err := t.ExecuteTemplate(&b, identifier, existingData)
-				if err != nil {
-					panic(err)
-				}
-				field.Set(reflect.ValueOf(htmltemplate.HTML(b.String())))
-				continue
-			}
-
-			if value, ok := attributes[fieldType.Name]; ok {
-				field.Set(reflect.ValueOf(value))
-				continue
-			}
-		}
-
-		var b bytes.Buffer
-		err := e.Render(&b, toCallRenderOn.Interface())
-		if err != nil {
-			panic(err)
-		}
-		return htmltemplate.HTML(b.String())
+// Dict is a helper function that can be used to create a map[string]any
+// in a template. It's primarily used to pass attributes to components.
+func Dict(args ...any) map[string]any {
+	if len(args)%2 != 0 {
+		panic("invalid number of arguments passed to __glamDict")
 	}
 
-}
+	dict := make(map[string]any, len(args)/2)
 
-func (t *glamTemplate) skipWhitespace(runes []rune) {
-	for unicode.IsSpace(runes[t.pos]) {
-		t.pos++
+	for i := 0; i < len(args); i += 2 {
+		dict[args[i].(string)] = args[i+1]
 	}
+
+	return dict
 }

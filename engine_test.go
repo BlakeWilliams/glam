@@ -1,4 +1,4 @@
-package template
+package glam
 
 import (
 	"bytes"
@@ -32,6 +32,13 @@ var nestedTemplate = `<article>
 </article>
 `
 
+// TODO: raise when a component is registered but is lowercased
+
+type HelloNestedComponent struct {
+	// TODO: Make this an int64 and handle casting
+	Age int
+}
+
 func TestTemplateParse_Nested(t *testing.T) {
 	engine := New(nil)
 	err := engine.RegisterComponent(
@@ -44,9 +51,9 @@ func TestTemplateParse_Nested(t *testing.T) {
 		nestedTemplate,
 	)
 	require.NoError(t, err)
-
-	err = engine.parseTemplate("main.glam.html", `
-		<b>
+	err = engine.RegisterComponent(
+		HelloNestedComponent{},
+		`<b>
 			Hello
 			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
 				<NestedComponent>
@@ -56,10 +63,8 @@ func TestTemplateParse_Nested(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	tmpl := engine.templateMap["main.glam.html"]
-
 	var b bytes.Buffer
-	err = tmpl.htmltemplate.Execute(&b, map[string]any{"Age": 32})
+	err = engine.Render(&b, HelloNestedComponent{Age: 32})
 	require.NoError(t, err)
 	require.Regexp(t, regexp.MustCompile(`<b>\s+Hello`), b.String())
 	require.Contains(t, b.String(), "Name: Fox Mulder")
@@ -103,25 +108,6 @@ func TestTemplateParse_Nested_ReverseRegister(t *testing.T) {
 	require.Regexp(t, regexp.MustCompile(`</b>`), b.String())
 }
 
-func TestTemplateParse_AttributesWithGoAttributes(t *testing.T) {
-	engine := New(FuncMap{
-		"GenerateURL": func(name string) string {
-			return "http://localhost:3000/sign-up"
-		},
-	})
-
-	err := engine.parseTemplate("main.glam.html", `<a href="{{ GenerateURL "sign up" }}">Sign up</a>`)
-	require.NoError(t, err)
-
-	tmpl := engine.templateMap["main.glam.html"]
-
-	var b bytes.Buffer
-	err = tmpl.htmltemplate.Execute(&b, nil)
-	require.NoError(t, err)
-
-	require.Regexp(t, regexp.MustCompile(`<a href="http://localhost:3000/sign-up">Sign up</a>`), b.String())
-}
-
 type testFSComponent struct {
 	Value string
 }
@@ -129,7 +115,7 @@ type testFSComponent struct {
 func TestEngineRegisterComponentFS(t *testing.T) {
 	engine := New(nil)
 
-	err := engine.RegisterComponentFS(&testFSComponent{}, "test.glam.html")
+	err := engine.RegisterComponentFS(&testFSComponent{}, "internal/template/test.glam.html")
 	require.NoError(t, err)
 
 	var b bytes.Buffer
@@ -137,4 +123,39 @@ func TestEngineRegisterComponentFS(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, b.String(), "Testing, world!")
+}
+
+type privateComponent struct{}
+type PublicComponent struct{}
+type Title struct{}
+
+func TestRegistrationFailures(t *testing.T) {
+	testCases := []struct {
+		desc        string
+		component   any
+		errorString string
+	}{
+		{
+			desc:        "lowercase component names return an error",
+			component:   privateComponent{},
+			errorString: "registered components must be public",
+		},
+		{
+			desc:        "components that collide with HTML tags return an error",
+			component:   Title{},
+			errorString: "component Title conflicts with an existing HTML tag",
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			engine := New(nil)
+			err := engine.RegisterComponent(tC.component, "<h1>Hi</h1>")
+
+			if tC.errorString == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tC.errorString)
+			}
+		})
+	}
 }

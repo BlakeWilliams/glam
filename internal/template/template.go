@@ -1,60 +1,105 @@
 package template
 
 import (
+	"bytes"
 	"fmt"
 	htmltemplate "html/template"
 	"io"
+	"reflect"
 	"unicode"
 )
 
-type glamTemplate struct {
-	Name         string
-	htmltemplate *htmltemplate.Template
-	rawContent   string
+type (
+	Template struct {
+		Name         string
+		htmltemplate *htmltemplate.Template
+		rawContent   string
+		renderer     Renderer
 
-	// these are temporary until we have compilde into an htmltemplate
-	pos int
+		// these are temporary until we have compilde into an htmltemplate
+		pos int
 
-	// potentialReferencedComponents is a map of component names that are
-	// referenced in the template, but not registered with the engine. This
-	// allows us to track references and recompile components when dependent
-	// components are registered.
-	potentialReferencedComponents map[string]bool
-}
-
-func newTemplate(name string, rawTemplate string) *glamTemplate {
-	return &glamTemplate{
-		Name:         name,
-		htmltemplate: htmltemplate.New(name),
-		rawContent:   rawTemplate,
+		// potentiallyReferencedComponents is a map of component names that are
+		// referenced in the template, but not registered with the engine. This
+		// allows us to track references and recompile components when dependent
+		// components are registered.
+		potentiallyReferencedComponents map[string]bool
 	}
+
+	Renderer interface {
+		Render(io.Writer, any) error
+		KnownComponents() map[string]reflect.Type
+		FuncMap() htmltemplate.FuncMap
+	}
+)
+
+func New(name string, r Renderer, rawTemplate string) (*Template, error) {
+	t := &Template{
+		Name:         name,
+		htmltemplate: htmltemplate.New(name).Funcs(r.FuncMap()),
+		rawContent:   rawTemplate,
+		renderer:     r,
+	}
+
+	// Ensure this component doesn't conflict with an existing HTML tag since
+	// this can break the recompilation strategy (because we don't consider
+	// matching HTML tags a potentially rendered component, so don't recompile
+	// dependencies upon registration)
+	if knownHTMLTags.IsKnown(name) {
+		return nil, fmt.Errorf("component %s conflicts with an existing HTML tag, consider suffixing it with Component", name)
+	}
+
+	err := t.parse()
+	if err != nil {
+		return nil, fmt.Errorf("could not parse template %s: %w", name, err)
+	}
+
+	return t, err
 }
 
 // Execute delegates to the underlying html/template
-func (t *glamTemplate) Execute(w io.Writer, data any) error {
+func (t *Template) Execute(w io.Writer, data any) error {
 	return t.htmltemplate.Execute(w, data)
 }
 
-func (t *glamTemplate) parse(funcs htmltemplate.FuncMap, components map[string]bool) error {
-	t.potentialReferencedComponents = make(map[string]bool)
+func (t *Template) ComponentsPotentiallyReferenced() map[string]bool {
+	return t.potentiallyReferencedComponents
+}
+
+func (t *Template) RawContent() string {
+	if t.rawContent == "" {
+		panic("raw content not available after compilation")
+	}
+
+	return t.rawContent
+}
+
+// Parse parses the template into an AST and then into an html/template
+// template. It also tracks any components that are referenced in the template
+// so they can be recompiled if/when they are registered with the engine.
+func (t *Template) parse() error {
+	t.htmltemplate.Funcs(htmltemplate.FuncMap{
+		"__glamRenderComponent": t.generateRenderFunc(),
+	})
+
+	t.potentiallyReferencedComponents = make(map[string]bool)
 
 	// If we have no potentially referenced components that might require
 	// recompilation, we can save some space and remove the content
 	defer func() {
 		t.pos = 0
-		if len(t.potentialReferencedComponents) == 0 {
+		if len(t.potentiallyReferencedComponents) == 0 {
 			t.rawContent = ""
 		}
 	}()
 
 	// turn template into AST nodes
-	nodes := t.parseRoot([]rune(t.rawContent), components)
+	nodes := t.parseRoot([]rune(t.rawContent), t.renderer.KnownComponents())
 
 	// Turn nodes into an html/template compatible string
 	content := compile(nodes)
 
 	var err error
-	t.htmltemplate.Funcs(funcs)
 	t.htmltemplate, err = t.htmltemplate.Parse(content)
 	if err != nil {
 		return fmt.Errorf("error parsing template: %w", err)
@@ -63,7 +108,7 @@ func (t *glamTemplate) parse(funcs htmltemplate.FuncMap, components map[string]b
 	return nil
 }
 
-func (t *glamTemplate) parseRoot(runes []rune, components map[string]bool) []*Node {
+func (t *Template) parseRoot(runes []rune, components map[string]reflect.Type) []*Node {
 	nodes := make([]*Node, 0)
 
 	start := t.pos
@@ -93,7 +138,7 @@ func (t *glamTemplate) parseRoot(runes []rune, components map[string]bool) []*No
 
 // ParseTag parses an HTML tag and either emits it, or generates the necessary
 // code to render a component
-func (t *glamTemplate) parseTag(runes []rune, components map[string]bool) (*Node, error) {
+func (t *Template) parseTag(runes []rune, components map[string]reflect.Type) (*Node, error) {
 	start := t.pos
 
 	// We somehow got here without a <, this is a bug
@@ -169,9 +214,12 @@ func (t *glamTemplate) parseTag(runes []rune, components map[string]bool) (*Node
 			// skip the >
 			t.pos++
 
-			// Keep track of this potential component so we can recompile the
-			// template if it's registered
-			t.potentialReferencedComponents[string(tagName)] = true
+			// If this isn't just a capitalized HTML tag, keep track of this
+			// potential component so we can recompile the template if it's
+			// registered
+			if !knownHTMLTags.IsKnown(string(tagName)) {
+				t.potentiallyReferencedComponents[string(tagName)] = true
+			}
 
 			return &Node{
 				Type: NodeTypeRaw,
@@ -212,7 +260,7 @@ func (t *glamTemplate) parseTag(runes []rune, components map[string]bool) (*Node
 	}, nil
 }
 
-func (t *glamTemplate) parseAttributes(runes []rune) (map[string]string, error) {
+func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 	attributes := make(map[string]string)
 
 	// If we have a > we can return the attributes as-is
@@ -266,7 +314,7 @@ func (t *glamTemplate) parseAttributes(runes []rune) (map[string]string, error) 
 	return attributes, nil
 }
 
-func (t *glamTemplate) parseQuotedAttribute(runes []rune) ([]rune, error) {
+func (t *Template) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	// Get the quote character and skip it
 	// TODO: this could be a "quoteless" attribute, so we need to handle that at
 	// some point
@@ -297,7 +345,7 @@ func (t *glamTemplate) parseQuotedAttribute(runes []rune) ([]rune, error) {
 	}
 }
 
-func (t *glamTemplate) skipGoTemplate(runes []rune) {
+func (t *Template) skipGoTemplate(runes []rune) {
 	// skip the {{
 	t.pos += 2
 
@@ -312,7 +360,7 @@ func (t *glamTemplate) skipGoTemplate(runes []rune) {
 	t.pos += 2
 }
 
-func (t *glamTemplate) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]bool) ([]*Node, error) {
+func (t *Template) parseUntilCloseTag(runes []rune, tagName []rune, components map[string]reflect.Type) ([]*Node, error) {
 	nodes := make([]*Node, 0)
 
 	start := t.pos
@@ -380,4 +428,65 @@ func (t *glamTemplate) parseUntilCloseTag(runes []rune, tagName []rune, componen
 		}
 
 	}
+}
+
+func (t *Template) skipWhitespace(runes []rune) {
+	for unicode.IsSpace(runes[t.pos]) {
+		t.pos++
+	}
+}
+
+func (t *Template) generateRenderFunc() func(string, string, map[string]any, any) htmltemplate.HTML {
+	return func(name string, identifier string, attributes map[string]any, existingData any) htmltemplate.HTML {
+		componentType, ok := t.renderer.KnownComponents()[name]
+		if !ok {
+			panic(fmt.Errorf("component %s not found", name))
+		}
+
+		// Get the type of the component, and if it's a pointer, get the underlying type
+		// so we can create a new instance of it
+		isPointer := componentType.Kind() == reflect.Ptr
+		if isPointer {
+			componentType = componentType.Elem()
+		}
+
+		// Create a new instance of the component
+		toRender := reflect.New(componentType)
+		toCallRenderOn := toRender
+		if isPointer {
+			toRender = toRender.Elem()
+		}
+
+		// Loop through the attributes and set them on the component
+		for i := 0; i < componentType.NumField(); i++ {
+			fieldType := componentType.Field(i)
+			field := toRender.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+
+			if fieldType.Name == "Children" {
+				var b bytes.Buffer
+				err := t.htmltemplate.ExecuteTemplate(&b, identifier, existingData)
+				if err != nil {
+					panic(err)
+				}
+				field.Set(reflect.ValueOf(htmltemplate.HTML(b.String())))
+				continue
+			}
+
+			if value, ok := attributes[fieldType.Name]; ok {
+				field.Set(reflect.ValueOf(value))
+				continue
+			}
+		}
+
+		var b bytes.Buffer
+		err := t.renderer.Render(&b, toCallRenderOn.Interface())
+		if err != nil {
+			panic(err)
+		}
+		return htmltemplate.HTML(b.String())
+	}
+
 }
