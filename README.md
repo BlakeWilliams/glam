@@ -62,3 +62,19 @@ type WrapperComponent struct {
 ```
 
 When the template above is executed, `WrapperComponent` will have `Children` populated with the HTML safe string `Hello`.
+
+### Graceful degradation
+
+Components can implement the `Recoverable` interface to rescue against `panic`s and render fallback content. For example:
+
+```go
+type SafeSidebar struct {
+	Children template.HTML
+}
+
+func (mc *SafeSidebar) Recover(w io.Writer, err any) {
+	w.Write(`<b>Failed to load sidebar</b>`)
+}
+```
+
+If any `panic` occurs when rendering `SafeSidebar` or child content (via `<SafeSidebar>foo bar</SafeSidebar>`) it will render the fallback content written.

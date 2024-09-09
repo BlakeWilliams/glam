@@ -20,9 +20,9 @@ func newDefine(node *Node) *define {
 func compile(nodes []*Node) string {
 	primaryContent, defines := rawCompile(nodes)
 
-	defineText := strings.Join(defines, "\n")
+	defineText := strings.Join(defines, "")
 
-	return defineText + "\n" + primaryContent
+	return defineText + primaryContent
 }
 
 // rawCompile accepts nodes and returns primaryContent, which is rendered in the

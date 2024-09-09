@@ -31,6 +31,10 @@ type (
 		KnownComponents() map[string]reflect.Type
 		FuncMap() htmltemplate.FuncMap
 	}
+
+	Recoverable interface {
+		Recover(w io.Writer, err any)
+	}
 )
 
 func New(name string, r Renderer, rawTemplate string) (*Template, error) {
@@ -58,7 +62,26 @@ func New(name string, r Renderer, rawTemplate string) (*Template, error) {
 }
 
 // Execute delegates to the underlying html/template
-func (t *Template) Execute(w io.Writer, data any) error {
+func (t *Template) Execute(w io.Writer, data any) (err error) {
+	if recoverable, ok := data.(Recoverable); ok {
+		defer func() {
+			r := recover()
+			recoverable.Recover(w, r)
+
+			// Ensure we don't return an error and blow up the rest of the chain
+			err = nil
+		}()
+
+		var b bytes.Buffer
+		err := t.htmltemplate.Execute(&b, data)
+		if err != nil {
+			return err
+		}
+
+		_, _ = io.Copy(w, &b)
+
+		return nil
+	}
 	return t.htmltemplate.Execute(w, data)
 }
 
@@ -131,6 +154,13 @@ func (t *Template) parseRoot(runes []rune, components map[string]reflect.Type) [
 		} else {
 			t.pos++
 		}
+	}
+
+	if t.pos > start {
+		nodes = append(nodes, &Node{
+			Type: NodeTypeRaw,
+			Raw:  string(runes[start:t.pos]),
+		})
 	}
 
 	return nodes

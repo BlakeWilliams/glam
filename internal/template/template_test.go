@@ -133,3 +133,51 @@ func TestSelfClosingNestedTags(t *testing.T) {
 
 	require.Contains(t, b.String(), `hello <!-- placeholder for EmptyComponent -->`)
 }
+
+type RescuableComponent struct {
+	ShouldPanic       bool
+	ShouldRenderHello bool
+}
+
+func (r *RescuableComponent) Recover(w io.Writer, err any) {
+	_, _ = w.Write([]byte("oh no!"))
+}
+
+func TestRescue(t *testing.T) {
+	renderer := &FakeRenderer{
+		knownComponents: make(map[string]reflect.Type),
+		funcMap: htmltemplate.FuncMap{
+			"PanicOhNo": func() string {
+				panic("oh no!")
+			},
+		},
+	}
+	tmpl, err := New("main.glam.html", renderer, `Hello world! {{PanicOhNo}}`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = tmpl.Execute(&b, &RescuableComponent{
+		ShouldRenderHello: true,
+		ShouldPanic:       true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "oh no!", b.String())
+}
+
+func TestTextOnlyTemplate(t *testing.T) {
+	renderer := &FakeRenderer{
+		knownComponents: make(map[string]reflect.Type),
+		funcMap: htmltemplate.FuncMap{
+			"PanicOhNo": func() string {
+				panic("oh no!")
+			},
+		},
+	}
+	tmpl, err := New("main.glam.html", renderer, `Hello world!`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = tmpl.Execute(&b, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Hello world!", b.String())
+}

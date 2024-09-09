@@ -14,6 +14,11 @@ import (
 type (
 	FuncMap = htmltemplate.FuncMap
 
+	// Recoverable is an interface that components can implement that will
+	// rescue the component from panic's. It provides an io.Writer to write
+	// fallback content when the template is `recover`ed.
+	Recoverable = template.Recoverable
+
 	// Engine is a template engine that can be used to render components
 	Engine struct {
 		// components is a map of component names that are available in the template
