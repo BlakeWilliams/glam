@@ -5,10 +5,12 @@ Glam is an attempt to make Go templates more component focused using the constra
 With glam, you can write templates like:
 
 ```html
-<FormComponent action="{{ .URL }}"> <!-- Initializes and renders a `type FormComponent struct` -->
-  <TextField placeholder="username" prefix="@" value={{.Username}}/> <!-- Initializes and renders the `type TextField struct` -->
-  <TextField placeholder="email" value={{.Email}}/> <!-- Initializes and renders the `type TextField struct` -->
-  <TextField placeholder="password" type="password"/> <!-- Initializes and renders the `type TextField struct` --></TextField
+<!-- Initializes and renders a `type FormComponent struct` -->
+<FormComponent action="{{ .URL }}">
+  <!-- Initializes and renders the `type TextField struct` -->
+  <TextField placeholder="username" prefix="@" value="{{.Username}}" />
+  <TextField placeholder="email" value="{{.Email}}" />
+  <TextField placeholder="password" type="password" />
 
   <button type="submit" class="btn">Sign Up</button>
 </FormComponent>
