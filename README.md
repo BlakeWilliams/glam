@@ -2,6 +2,35 @@
 
 Glam is an attempt to make Go templates more component focused using the constraints of the existing Go language and tooling.
 
+With glam, you can write templates like:
+
+```html
+<FormComponent action="{{ .URL }}"> <!-- Initializes and renders a `type FormComponent struct` -->
+  <TextField placeholder="username" prefix="@" value={{.Username}}/> <!-- Initializes and renders the `type TextField struct` -->
+  <TextField placeholder="email" value={{.Email}}/> <!-- Initializes and renders the `type TextField struct` -->
+  <TextField placeholder="password" type="password"/> <!-- Initializes and renders the `type TextField struct` --></TextField
+
+  <button type="submit" class="btn">Sign Up</button>
+</FormComponent>
+```
+
+With structs backing the logic and templates:
+
+```go
+type FormComponent struct {
+	Action   string        `attr:"action"`
+	Children template.HTML
+	Class    string        `attr:"class"`
+}
+```
+
+```html
+<!-- FormComponent template -->
+<form action="{{.Action}}" class="default classes {{.Class}}">
+  {{.Children}}
+</form>
+```
+
 ## Usage
 
 Glam takes an approach similar to [ViewComponent](https://viewcomponent.org/), using sidecar templates to define components. In addition to coupling Go templates with structs, glam also allows enables a React style syntax for utilizing components in your templates.

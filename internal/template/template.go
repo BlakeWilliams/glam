@@ -6,6 +6,7 @@ import (
 	htmltemplate "html/template"
 	"io"
 	"reflect"
+	"strings"
 	"unicode"
 )
 
@@ -343,25 +344,27 @@ func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 			t.pos++
 		}
 
-		name := runes[nameStart:t.pos]
+		// Lowercase the attribute name so we can ignore case sensitivity when
+		// assigning attributes to struct fields
+		name := strings.ToLower(string(runes[nameStart:t.pos]))
 
 		switch runes[t.pos] {
 		// If we have a / we can consume it and subsequent whitespace and return attributes as-is
 		case '/':
 			t.pos++
 			t.skipWhitespace(runes)
-			attributes[string(name)] = "true"
+			attributes[name] = "true"
 			return attributes, nil
 		// If we have a > we can return the attributes as-is
 		case '>':
-			attributes[string(name)] = "true"
+			attributes[name] = "true"
 			return attributes, nil
 		// If we have a ' ' we can set the boolean attribute and move on
 		case ' ':
 			// TODO check if there's an equal sign after this space
 			t.skipWhitespace(runes)
 
-			attributes[string(name)] = "true"
+			attributes[name] = "true"
 			continue
 		// If we have an = we need to find the end of the attribute value
 		case '=':
@@ -373,7 +376,7 @@ func (t *Template) parseAttributes(runes []rune) (map[string]string, error) {
 				return nil, fmt.Errorf("error parsing quoted attribute: %w", err)
 			}
 
-			attributes[string(name)] = string(value)
+			attributes[name] = string(value)
 		}
 
 		// Skip any whitespace
@@ -547,7 +550,12 @@ func (t *Template) generateRenderFunc() func(string, string, map[string]any, any
 				continue
 			}
 
-			if value, ok := attributes[fieldType.Name]; ok {
+			expectedName := strings.ToLower(fieldType.Name)
+			if name := fieldType.Tag.Get("attr"); name != "" {
+				expectedName = name
+			}
+
+			if value, ok := attributes[expectedName]; ok {
 				field.Set(reflect.ValueOf(value))
 				continue
 			}

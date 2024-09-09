@@ -11,7 +11,7 @@ import (
 
 // WrapperComponent is a test component that renders a div with a name and age
 type WrapperComponent struct {
-	Name     string
+	Name     string `attr:"name"`
 	Age      int
 	Children template.HTML
 }
@@ -39,7 +39,7 @@ type HelloNestedComponent struct {
 	Age int
 }
 
-func TestTemplateParse_Nested(t *testing.T) {
+func TestRenderNestedTemplate(t *testing.T) {
 	engine := New(nil)
 	err := engine.RegisterComponent(
 		&WrapperComponent{},
@@ -55,7 +55,7 @@ func TestTemplateParse_Nested(t *testing.T) {
 		HelloNestedComponent{},
 		`<b>
 			Hello
-			<WrapperComponent rad Name="Fox Mulder" Age="{{.Age}}">
+			<WrapperComponent rad name="Fox Mulder" Age="{{.Age}}">
 				<NestedComponent>
 				Foo
 				</NestedComponent>
@@ -79,7 +79,7 @@ type GreetingPage struct {
 
 var greetingTemplate = `<b>
 	Hello
-	<WrapperComponent rad Name="{{.Name}}" Age="{{32}}">
+	<WrapperComponent rad name="{{.Name}}" Age="{{32}}">
 		<NestedComponent>
 		Foo
 		</NestedComponent>
