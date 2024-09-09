@@ -7,6 +7,8 @@ Glam is an attempt to make Go templates more component focused using the constra
 Glam takes an approach similar to [ViewComponent](https://viewcomponent.org/), using sidecar templates to define components. In addition to coupling Go templates with structs, glam also allows enables a React style syntax for utilizing components in your templates.
 
 ```go
+import "github.com/blakewilliams/glam"
+
 type GreetPage struct {
 	Name string
 }
@@ -17,7 +19,7 @@ func (g GreetPage) YellName() string {
 }
 
 // Then, to render the template:
-engine := template.New(nil)
+engine := glam.New(nil)
 engine.RegisterComponent(GreetPage{}, `Hello, {{.YellName}}`)
 
 var b strings.Builder
