@@ -125,6 +125,30 @@ func TestEngineRegisterComponentFS(t *testing.T) {
 	require.Contains(t, b.String(), "Testing, world!")
 }
 
+type FormComponent struct{}
+
+func TestRenderWithFuncs(t *testing.T) {
+	engine := New(FuncMap{
+		"CSRF": func() string {
+			panic("must be overridden")
+		},
+	})
+
+	err := engine.RegisterComponent(&TestFSComponent{}, `<input type="hidden" value="{{ CSRF }}">`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.RenderWithFuncs(&b, &TestFSComponent{Value: "world!"}, FuncMap{
+		"CSRF": func() string {
+			// pretend this is csrf
+			return "abc123"
+		},
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, `<input type="hidden" value="abc123">`, b.String())
+}
+
 type privateComponent struct{}
 type PublicComponent struct{}
 type Title struct{}

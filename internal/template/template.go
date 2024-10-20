@@ -63,7 +63,12 @@ func New(name string, r Renderer, rawTemplate string) (*Template, error) {
 }
 
 // Execute delegates to the underlying html/template
-func (t *Template) Execute(w io.Writer, data any) (err error) {
+func (t *Template) Execute(w io.Writer, data any, funcMap htmltemplate.FuncMap) (err error) {
+	template, err := t.htmltemplate.Clone()
+	if err != nil {
+		panic("bug: somehow the template could not be cloned")
+	}
+
 	if recoverable, ok := data.(Recoverable); ok {
 		defer func() {
 			r := recover()
@@ -74,7 +79,7 @@ func (t *Template) Execute(w io.Writer, data any) (err error) {
 		}()
 
 		var b bytes.Buffer
-		err := t.htmltemplate.Execute(&b, data)
+		err = template.Execute(&b, data)
 		if err != nil {
 			return err
 		}
@@ -83,7 +88,14 @@ func (t *Template) Execute(w io.Writer, data any) (err error) {
 
 		return nil
 	}
-	return t.htmltemplate.Execute(w, data)
+
+	if funcMap != nil {
+		// TODO: consider ensuring that all funcs in the func map are in the
+		// existing template funcMap
+		template.Funcs(funcMap)
+	}
+
+	return template.Execute(w, data)
 }
 
 func (t *Template) ComponentsPotentiallyReferenced() map[string]bool {

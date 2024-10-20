@@ -61,7 +61,7 @@ func TestStandardGoTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = tmpl.Execute(&b, nil)
+	err = tmpl.Execute(&b, nil, nil)
 	require.NoError(t, err)
 
 	require.Regexp(t, regexp.MustCompile(`<a href="http://localhost:3000/sign-up">Sign up</a>`), b.String())
@@ -114,7 +114,7 @@ func TestSelfClosingTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = tmpl.Execute(&b, nil)
+	err = tmpl.Execute(&b, nil, nil)
 	require.NoError(t, err)
 
 	require.Contains(t, b.String(), `hello <!-- placeholder for EmptyComponent -->`)
@@ -128,7 +128,7 @@ func TestSelfClosingNestedTags(t *testing.T) {
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = tmpl.Execute(&b, nil)
+	err = tmpl.Execute(&b, nil, nil)
 	require.NoError(t, err)
 
 	require.Contains(t, b.String(), `hello <!-- placeholder for EmptyComponent -->`)
@@ -159,7 +159,7 @@ func TestRescue(t *testing.T) {
 	err = tmpl.Execute(&b, &RescuableComponent{
 		ShouldRenderHello: true,
 		ShouldPanic:       true,
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.Equal(t, "oh no!", b.String())
 }
@@ -177,7 +177,7 @@ func TestTextOnlyTemplate(t *testing.T) {
 	require.NoError(t, err)
 
 	var b bytes.Buffer
-	err = tmpl.Execute(&b, nil)
+	err = tmpl.Execute(&b, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, "Hello world!", b.String())
 }

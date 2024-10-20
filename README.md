@@ -96,6 +96,28 @@ type WrapperComponent struct {
 
 When the template above is executed, `WrapperComponent` will have `Children` populated with the HTML safe string `Hello`.
 
+### Request specific data
+
+Glam templates can utilize request specific data via `RenderWithFuncs`:
+
+```go
+engine := glam.New(glam.FuncMap{
+	"CSRF": func() string {
+		// assuming request is in scope and has a CSRFToken method
+		panic("must be overridden")
+	},
+})
+engine.RegisterComponent(&LoginForm{}, "<form><input type='hidden' name='authenticity_token' value='{{ CSRF }}' /></form>")
+
+var b strings.Builder
+engine.RenderWithFuncs(&b, &LoginForm{}, glam.FuncMap{
+	"CSRF": func() string {
+		// assuming request is in scope and has a CSRFToken method
+		return request.CSRFToken()
+	},
+})
+````
+
 ### Graceful degradation
 
 Components can implement the `Recoverable` interface to rescue against `panic`s and render fallback content. For example:

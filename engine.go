@@ -57,13 +57,19 @@ func New(funcs FuncMap) *Engine {
 // Render renders the provided toRender value to the provided writer. `renderable` should
 // be a struct or a pointer to a struct that has been registered with the engine.
 func (e *Engine) Render(w io.Writer, renderable any) error {
+	return e.RenderWithFuncs(w, renderable, nil)
+}
+
+func (e *Engine) RenderWithFuncs(w io.Writer, renderable any, funcMap FuncMap) error {
+	// Thought, create a render function that accepts a funcmap to override
+	// after `.cloning` a template. This will enable passing request specific data
 	v := reflect.ValueOf(renderable)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
 	if template, ok := e.templateMap[v.Type().Name()]; ok {
-		err := template.Execute(w, renderable)
+		err := template.Execute(w, renderable, funcMap)
 		if err != nil {
 			return fmt.Errorf("error rendering component: %w", err)
 		}
@@ -103,7 +109,7 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 	return nil
 }
 
-// RegisterComponentFS registeres the given component with the engine, reading
+// RegisterComponentFS registers the given component with the engine, reading
 // the file at the given path and using it as the template for the component.
 func (e *Engine) RegisterComponentFS(value any, filePath string) error {
 	c, err := os.ReadFile(filePath)
@@ -119,7 +125,7 @@ func (e *Engine) KnownComponents() map[string]reflect.Type {
 	return e.components
 }
 
-// Funcs :nodoc:
+// :nodoc:
 func (e *Engine) FuncMap() FuncMap {
 	return e.funcs
 }
