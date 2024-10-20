@@ -422,6 +422,8 @@ func (t *Template) parseQuotedAttribute(runes []rune) ([]rune, error) {
 		case '{':
 			if runes[t.pos+1] == '{' {
 				t.skipGoTemplate(runes)
+			} else {
+				t.pos++
 			}
 		default:
 			t.pos++

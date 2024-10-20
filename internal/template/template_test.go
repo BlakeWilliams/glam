@@ -181,3 +181,10 @@ func TestTextOnlyTemplate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Hello world!", b.String())
 }
+
+// There was an infinite loop while parsing this template. Lets fix it
+func TestLoneLeftCurly(t *testing.T) {
+	renderer := &FakeRenderer{}
+	_, err := New("main.glam.html", renderer, `<h1 foo="{oops}">Hi</h1>`)
+	require.NoError(t, err)
+}
