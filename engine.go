@@ -4,7 +4,7 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"io"
-	"os"
+	"io/fs"
 	"reflect"
 	"unicode"
 
@@ -111,13 +111,24 @@ func (e *Engine) RegisterComponent(value any, templateString string) error {
 
 // RegisterComponentFS registers the given component with the engine, reading
 // the file at the given path and using it as the template for the component.
-func (e *Engine) RegisterComponentFS(value any, filePath string) error {
-	c, err := os.ReadFile(filePath)
+func (e *Engine) RegisterComponentFS(value any, fs fs.ReadFileFS, filePath string) error {
+	c, err := fs.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("could not read file: %w", err)
 	}
 
 	return e.RegisterComponent(value, string(c))
+}
+
+func (e *Engine) RegisterManyFS(fs fs.ReadFileFS, components map[any]string) error {
+	for component, path := range components {
+		err := e.RegisterComponentFS(component, fs, path)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // KnownComponents returns a map of known component names

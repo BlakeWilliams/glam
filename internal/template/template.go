@@ -116,6 +116,9 @@ func (t *Template) RawContent() string {
 func (t *Template) parse() error {
 	t.htmltemplate.Funcs(htmltemplate.FuncMap{
 		"__glamRenderComponent": t.generateRenderFunc(),
+		"safe": func(s string) htmltemplate.HTML {
+			return htmltemplate.HTML(s)
+		},
 	})
 
 	t.potentiallyReferencedComponents = make(map[string]bool)

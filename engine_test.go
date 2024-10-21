@@ -3,6 +3,8 @@ package glam
 import (
 	"bytes"
 	"html/template"
+	"io/fs"
+	"os"
 	"regexp"
 	"testing"
 
@@ -37,6 +39,33 @@ var nestedTemplate = `<article>
 type HelloNestedComponent struct {
 	// TODO: Make this an int64 and handle casting
 	Age int
+}
+
+type MapComponent struct {
+	Map map[string]string
+}
+
+func TestRenderMapTemplate(t *testing.T) {
+	engine := New(nil)
+	err := engine.RegisterComponent(
+		&WrapperComponent{},
+		wrapperTemplate,
+	)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(
+		MapComponent{},
+		`<b>
+			Hello
+			<WrapperComponent name="{{index .Map "Fox"}}">
+			</WrapperComponent>
+		</b>
+	`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.Render(&b, MapComponent{Map: map[string]string{"Fox": "Fox Mulder"}})
+	require.NoError(t, err)
+	require.Contains(t, b.String(), "Name: Fox Mulder")
 }
 
 func TestRenderNestedTemplate(t *testing.T) {
@@ -114,8 +143,9 @@ type TestFSComponent struct {
 
 func TestEngineRegisterComponentFS(t *testing.T) {
 	engine := New(nil)
+	templateFS := os.DirFS("internal/template")
 
-	err := engine.RegisterComponentFS(&TestFSComponent{}, "internal/template/test.glam.html")
+	err := engine.RegisterComponentFS(&TestFSComponent{}, templateFS.(fs.ReadFileFS), "test.glam.html")
 	require.NoError(t, err)
 
 	var b bytes.Buffer

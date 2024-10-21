@@ -50,6 +50,11 @@ func rawCompile(nodes []*Node) (primaryContent string, defineContent []string) {
 			for k, v := range node.Attributes {
 				if strings.HasPrefix(v, "{{") {
 					v = strings.Trim(v, "{} ")
+					needsParens := strings.Contains(v, " ")
+					if needsParens {
+						v = fmt.Sprintf(`(%s)`, v)
+					}
+
 					attributes.WriteString(fmt.Sprintf(` "%s" %s`, k, v))
 					continue
 				}
