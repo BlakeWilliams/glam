@@ -557,7 +557,7 @@ func (t *Template) generateRenderFunc() func(string, string, map[string]any, any
 				continue
 			}
 
-			if fieldType.Name == "Children" {
+			if fieldType.Name == "Children" && identifier != "" {
 				var b bytes.Buffer
 				err := t.htmltemplate.ExecuteTemplate(&b, identifier, existingData)
 				if err != nil {

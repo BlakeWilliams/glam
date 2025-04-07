@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -212,4 +213,126 @@ func TestRegistrationFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponentNoChildrenPassed(t *testing.T) {
+	engine := New(FuncMap{
+		"trim":    strings.TrimSpace,
+		"toUpper": strings.ToUpper,
+	})
+
+	type ButtonComponent struct {
+		Children template.HTML
+	}
+	type RootComponent struct{}
+	err := engine.RegisterComponent(&ButtonComponent{}, `<button>{{.Children}}</button>`)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&RootComponent{}, `<ButtonComponent></ButtonComponent>`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.Render(&b, &RootComponent{})
+	require.NoError(t, err)
+
+	require.Equal(t, `<button></button>`, b.String())
+}
+
+func TestAttributePipeline(t *testing.T) {
+	engine := New(FuncMap{
+		"trim":    strings.TrimSpace,
+		"toUpper": strings.ToUpper,
+	})
+
+	type ButtonComponent struct {
+		Children template.HTML
+	}
+	type LoopComponent struct {
+		Names []string
+	}
+	err := engine.RegisterComponent(&ButtonComponent{}, `<button>{{.Children}}</button>`)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&LoopComponent{}, `{{range $_, $name := .Names}}<ButtonComponent>{{$name | trim | toUpper}}</ButtonComponent>{{end}}`)
+
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.RenderWithFuncs(&b, &LoopComponent{Names: []string{" Fox", "Dana", "Skinner"}}, FuncMap{})
+	require.NoError(t, err)
+
+	require.Equal(t, `<button>FOX</button><button>DANA</button><button>SKINNER</button>`, b.String())
+}
+
+func TestRenderLoop(t *testing.T) {
+	engine := New(FuncMap{})
+
+	type ButtonComponent struct {
+		Children template.HTML
+	}
+	type LoopComponent struct {
+		Names []string
+	}
+	err := engine.RegisterComponent(&ButtonComponent{}, `<button>{{.Children}}</button>`)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&LoopComponent{}, `{{range $_, $name := .Names}}<ButtonComponent>{{$name}} {{"$name"}} </ButtonComponent>{{end}}`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.RenderWithFuncs(&b, &LoopComponent{Names: []string{"Fox", "Dana", "Skinner"}}, FuncMap{})
+	require.NoError(t, err)
+
+	require.Equal(t, `<button>Fox $name </button><button>Dana $name </button><button>Skinner $name </button>`, b.String())
+}
+
+func TestNestedRenderLoop(t *testing.T) {
+	engine := New(FuncMap{})
+
+	type ButtonComponent struct {
+		Children template.HTML
+		DataName string `attr:"data-name"`
+	}
+	type LoopComponent struct {
+		Names []string
+	}
+	err := engine.RegisterComponent(&ButtonComponent{}, `<button data-name="{{.DataName}}">{{.Children}}</button>`)
+	require.NoError(t, err)
+	err = engine.RegisterComponent(&LoopComponent{}, `
+		{{range $_, $name := .Names}}
+		<ButtonComponent data-name="{{$name}}">
+			{{$name}}
+			<ButtonComponent data-name="{{$name}}">
+				{{$name}}
+			</ButtonComponent>
+		</ButtonComponent>
+		{{end}}
+	`)
+	require.NoError(t, err)
+
+	var b bytes.Buffer
+	err = engine.RenderWithFuncs(&b, &LoopComponent{Names: []string{"Fox", "Dana", "Skinner"}}, FuncMap{})
+	require.NoError(t, err)
+
+	require.Equal(t, `
+		
+		<button data-name="Fox">
+			Fox
+		<button data-name="Fox">
+				Fox
+			</button>
+		</button>
+		
+		<button data-name="Dana">
+			Dana
+		<button data-name="Dana">
+				Dana
+			</button>
+		</button>
+		
+		<button data-name="Skinner">
+			Skinner
+		<button data-name="Skinner">
+				Skinner
+			</button>
+		</button>
+		
+	`, b.String())
 }
